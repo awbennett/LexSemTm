@@ -1,2 +1,3 @@
 # HCA-WSI
-Code for running HCA-WSI and working with the LexSemTm dataset
+
+Code for accessing the LexSemTm dataset, and running HCA-WSI on raw data
