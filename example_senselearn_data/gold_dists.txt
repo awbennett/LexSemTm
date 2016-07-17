@@ -1,0 +1,238 @@
+anatomy.n.en.01 70
+anatomy.n.en.02 21
+anatomy.n.en.03 9
+
+animation.n.en.01 3
+animation.n.en.03 1
+animation.n.en.05 95
+animation.n.en.06 1
+
+associate.n.en.01 51
+associate.n.en.02 21
+associate.n.en.03 16
+associate.n.en.04 6
+associate.n.en.05 6
+
+base.n.en.01 25
+base.n.en.02 5
+base.n.en.03 4
+base.n.en.04 9
+base.n.en.05 3
+base.n.en.06 1
+base.n.en.07 4
+base.n.en.08 1
+base.n.en.11 3
+base.n.en.12 14
+base.n.en.13 6
+base.n.en.14 20
+base.n.en.16 1
+base.n.en.17 1
+base.n.en.18 3
+
+belt.n.en.01 13
+belt.n.en.02 53
+belt.n.en.03 30
+belt.n.en.04 1
+belt.n.en.06 3
+
+blend.n.en.01 43
+blend.n.en.02 2
+blend.n.en.03 55
+
+bowler.n.en.01 86
+bowler.n.en.02 9
+bowler.n.en.03 5
+
+canvas.n.en.01 8
+canvas.n.en.02 83
+canvas.n.en.03 4
+canvas.n.en.05 3
+canvas.n.en.06 2
+
+conjecture.n.en.01 71
+conjecture.n.en.02 5
+conjecture.n.en.03 24
+
+cream.n.en.01 5
+cream.n.en.02 89
+cream.n.en.03 6
+
+crossover.n.en.01 4
+crossover.n.en.03 83
+crossover.n.en.04 13
+
+designer.n.en.01 11
+designer.n.en.02 44
+designer.n.en.03 19
+designer.n.en.04 2
+designer.n.en.05 24
+
+engagement.n.en.01 53
+engagement.n.en.02 7
+engagement.n.en.03 16
+engagement.n.en.05 10
+engagement.n.en.06 6
+engagement.n.en.07 8
+
+fin.n.en.01 2
+fin.n.en.02 6
+fin.n.en.03 2
+fin.n.en.04 2
+fin.n.en.05 23
+fin.n.en.06 65
+
+flora.n.en.01 82
+flora.n.en.02 18
+
+format.n.en.01 48
+format.n.en.02 52
+
+graduate.n.en.01 100
+
+heroine.n.en.01 87
+heroine.n.en.02 13
+
+hobby.n.en.01 98
+hobby.n.en.02 1
+hobby.n.en.03 1
+
+integration.n.en.01 14
+integration.n.en.02 79
+integration.n.en.03 7
+
+jewel.n.en.01 85
+jewel.n.en.02 15
+
+lane.n.en.01 11
+lane.n.en.02 89
+
+lease.n.en.01 17
+lease.n.en.02 66
+lease.n.en.03 17
+
+lodge.n.en.02 39
+lodge.n.en.03 11
+lodge.n.en.04 21
+lodge.n.en.05 7
+lodge.n.en.06 22
+
+metabolism.n.en.02 100
+
+number.n.en.01 68
+number.n.en.02 7
+number.n.en.05 13
+number.n.en.06 2
+number.n.en.07 2
+number.n.en.08 8
+
+occupation.n.en.01 25
+occupation.n.en.02 38
+occupation.n.en.03 1
+occupation.n.en.04 4
+occupation.n.en.05 32
+
+opinion.n.en.01 45
+opinion.n.en.02 7
+opinion.n.en.03 29
+opinion.n.en.04 5
+opinion.n.en.05 11
+opinion.n.en.06 3
+
+orange.n.en.01 35
+orange.n.en.02 58
+orange.n.en.03 6
+orange.n.en.04 1
+
+original.n.en.01 69
+original.n.en.02 31
+
+parent.n.en.01 85
+parent.n.en.02 15
+
+payment.n.en.01 61
+payment.n.en.02 35
+payment.n.en.03 4
+
+pleasure.n.en.01 25
+pleasure.n.en.02 26
+pleasure.n.en.03 9
+pleasure.n.en.04 29
+pleasure.n.en.05 11
+
+poster.n.en.01 96
+poster.n.en.02 4
+
+pot.n.en.01 65
+pot.n.en.03 1
+pot.n.en.04 4
+pot.n.en.05 4
+pot.n.en.06 16
+pot.n.en.07 1
+pot.n.en.08 8
+pot.n.en.09 1
+
+propulsion.n.en.01 98
+propulsion.n.en.02 2
+
+punt.n.en.01 2
+punt.n.en.02 5
+punt.n.en.03 93
+
+result.n.en.01 59
+result.n.en.02 1
+result.n.en.03 40
+
+speech.n.en.01 63
+speech.n.en.02 15
+speech.n.en.03 3
+speech.n.en.04 3
+speech.n.en.05 10
+speech.n.en.07 6
+
+step.n.en.01 64
+step.n.en.02 2
+step.n.en.03 10
+step.n.en.04 7
+step.n.en.05 7
+step.n.en.06 3
+step.n.en.08 2
+step.n.en.11 5
+
+survey.n.en.01 86
+survey.n.en.02 8
+survey.n.en.03 6
+
+symphony.n.en.01 84
+symphony.n.en.02 16
+
+technology.n.en.01 89
+technology.n.en.02 11
+
+tension.n.en.01 7
+tension.n.en.02 2
+tension.n.en.03 12
+tension.n.en.04 14
+tension.n.en.05 62
+tension.n.en.06 3
+
+theory.n.en.01 39
+theory.n.en.02 37
+theory.n.en.03 24
+
+treason.n.en.01 96
+treason.n.en.02 2
+treason.n.en.03 2
+
+uncle.n.en.01 100
+
+variable.n.en.01 31
+variable.n.en.02 42
+variable.n.en.04 27
+
+victim.n.en.01 87
+victim.n.en.02 13
+
+zombie.n.en.01 94
+zombie.n.en.02 1
+zombie.n.en.04 5
+

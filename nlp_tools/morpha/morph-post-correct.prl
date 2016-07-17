@@ -1,0 +1,23 @@
+#!/usr/bin/perl -w
+
+$FILLER_POS = '(?:RB[RS]?|,|\`\`|\'\')';
+
+
+
+while (<>)
+{
+    s/(^| )(\'d)(_MD (\S+_$FILLER_POS )*\S+_VB[PZ]? )/$1would$3/og;
+    s/(^| )(\'d)(_MD (\S+_$FILLER_POS )*\S+_VB[DGNP] )/$1have$3/og;
+
+    s/((^| )(\d{4}_CD ))BE_\S+ /$1\'s_POS /g;
+    s/((^| )(let_\S+ ))BE_/$1us_/g;
+    s/(^| )BE(_\S+ (\S+_$FILLER_POS )*\S+_VBD )/$1have$2/og;
+    s/(^| )BE(_VB\S+ )/$1be$2/g;
+
+    s/(^| )ai(_\S+ (\S+_$FILLER_POS )*\S+_VBD )/$1have$2/og;
+    s/(^| )ai(_VB\S+ )/$1be$2/g;
+
+    s/(^| )\'(_POS )/$1\'s$2/g;
+
+    print;
+}

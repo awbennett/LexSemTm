@@ -1,0 +1,1133 @@
+\documentclass[a4paper,english]{article}
+\usepackage{a4wide}
+\usepackage[latin1]{inputenc}
+\usepackage{babel}
+\usepackage{verbatim}
+
+\usepackage[fancyhdr]{latex2man}
+
+\setDate{2014/09/10}
+\setVersion{0.61}
+
+\begin{document}
+
+\begin{Name}{1}{hca}{Wray Buntine}{Data Analysis Tools}{hca}
+
+  \Prog{hca} is research software
+that does various versions of non-parametric topic models using Gibbs sampling including LDA, HDP-LDA, NP-LDA, all with/without burstiness modelling.  Various diagnostics, ``document completion'' testing and coherence measurements with PMI are also supported. The code
+runs on multi-core getting about 50\% efficiency with 8 cores.
+
+\end{Name}
+
+\section{Synopsis}
+%%%%%%%%%%%%%%%%%%
+
+\Prog{hca} \oOpt{-?} \oOptArg{-?}{Arg}
+                 \Arg{DataStem} \Arg{RepStem}
+
+\section{Description}
+%%%%%%%%%%%%%%%%%%%%%
+\Prog{hca} reads the collection of files with stem
+\Arg{DataStem} that form the input set of data.
+When checkpointing, or at termination, the output is written
+to files with stem  \Arg{RepStem}.
+On restart with the \OptArg{-r}{0} option, some of these
+are also read initially to restore the previous state.
+A log of the run is reported to \File{stderr} if the
+\Opt{-e} option is used.  By default, the log goes to
+\File{RepStem.log}.
+
+The programme is research software, so not all options
+or combinations of options work correctly.
+Note that in this release, all the more experimental features
+have been stripped, so this release contains
+only moderately well tested components.
+Note also, this is not intended to be code that others could easily
+modify.  In order to get performance, to provide all the features,
+and to run multi-core, the code is quite convoluted.
+Researchers seeking simple code they can experiment and
+modify themselves should request a cutdown version from the author.
+
+The programme runs a Gibbs sampler for a variety of
+non-parametric topic models
+including HDP-LDA.
+The model selected has three parts:
+\begin{Description}[alpha]
+\item[alpha:] this is the prior on topic vector (theta) for each document.
+LDA has a simple symmetric Dirichlet with parameter alpha
+and the vector has dimension $T$ (the number of topics).
+\item[beta:] this is the prior on word vector  (phi) for each topic.
+LDA has a simple symmetric Dirichlet with parameter beta
+and the vector has dimension $W$ (the number of words).
+\item[burst:]  this is the burstiness component which has
+a document specific variant of the word vector for
+each topic.  This is not used by default.
+\end{Description}
+These parts are set using the
+\Opt{-S}, \Opt{-A} and \Opt{-B} options.
+
+There are various model parameters, notably the
+discount and concentrations for the different Pitman-Yor
+processes in the model.
+These are usually sampled using Adaptive Rejection Sampling.
+They are also kept bounded using constraints coded
+into the \File{util/dimdir.h} header file.
+So when a parameter fails to change, check the sampling
+by increasing verbosity and you may observe the value tries to 
+change but doesn't.
+
+The programme uses generalised second order Stirling numbers
+with the library extracted from \Prog{libstb} version 1.8
+released at \URL{https://github.com/wbuntine/libstb}.
+This is initialised with predefined bounds on the tables,
+and these can be modified with the \Opt{-N} option.
+This should be used for collections with larger  numbers of
+documents, but its best to run first and on
+error, increase the bounds.
+
+\section{Options}
+%%%%%%%%%%%%%%%%%
+
+Options have a single letter followed by a possible
+single argument.  Options are grouped under
+the following functions:
+\emph{setting of hyperparameters}, 
+\emph{controlling sampling of hyperparameters},
+\emph{general control}, and
+\emph{testing and reports}
+
+\subsection{Setting up the model and hyperparameters}
+For these, \texttt{theta} is a vector for each document representing the
+topic proportions and
+ \texttt{phi} is a vector for each topic representing the
+word proportions.  The task of the system is to estimate these.
+The vector theta and its various priors and parameters is the Alpha side
+and the vector phi and its various priors and parameters is the Beta side.
+All the scalar parameters can be set using the 
+\OptArg{-S}{var=value} option 
+and thereafter fixed using the \OptArg{-F}{var} option
+or by default sampled
+using adaptive rejection sampling.
+
+\begin{Description}[\OptArg{-t}{transfile}]\setlength{\itemsep}{0cm}
+\item[{-A}{value[,file]}]  Use a symmetric Dirichlet prior on theta
+using this \texttt{value} for each dimension.  The value must be a positive float.  With the optional \texttt{file} argument, the file
+specifies the probability vector to use as the mean vector of the
+Dirichlet. The file is in text format representing  \texttt{T} 
+(the number of topics) floats.
+Then multiply the mean vector by \texttt{T*value} 
+to get the Dirichlet parameter vector.
+i.e, the mean of the \texttt{T} values 
+in the Dirichlet parameter vector is \texttt{value}.
+\item[{-A}{dir[,file]}]  Same as \OptArg{-A}{value[,file]} but
+\texttt{value} is set to a default,
+0.05*\texttt{ave-len}/\texttt{T} where
+\texttt{ave-len} is the average document length in the training set.
+\item[{-A}{type[,file]}]  This other version of the
+\Opt{-A} option  changes the Alpha side 
+Dirichlet on theta to a Pitman-Yor process, thus
+allowing estimation of hierarchical prior.
+It defines a distribution on theta and its prior mean (a vector) 
+ \texttt{alpha} of \texttt{type} as follows:
+\begin{Description}[hpdd]
+\item[hdp] 
+theta is modelled with a Dirichlet Process 
+with mean \texttt{alpha} and concentration \texttt{b},
+and alpha is modelled with a symmetric Dirichlet with concentration
+\texttt{b0}.
+If the \texttt{file} optional argument is used
+then it specifies an input file giving the
+mean of the Dirichlet over \texttt{alpha}.
+By default the mean is a uniform vector.
+\item[hpdd] theta is modelled with a Pitman-Yor Process
+with mean \texttt{alpha}, discount \texttt{a} and concentration \texttt{b},
+and alpha is modelled with a (truncated) GEM 
+with discount \texttt{a0} and concentration \texttt{b0}.
+This is the default.
+The \texttt{file} optional argument is ignored.
+\item[pdp] theta is modelled with a Pitman-Yor Process
+with mean \texttt{alpha}, discount \texttt{a} and concentration \texttt{b},
+and the alpha vector is uniform.
+This is not hierarchical because alpha is constant.
+If the \texttt{file} optional argument is used
+then it specifies \texttt{alpha}.
+\end{Description}
+\item[{-B}{value[,file]}]  Use a symmetric Dirichlet prior with
+this \texttt{value} for each dimension.
+The value must be a positive float.
+\emph{Warning:}
+ the value stored internally and printed is the total of this over the
+number of words \texttt{W}.
+With the optional \texttt{file} argument, the file
+specifies the probability vector to use as the mean vector of the
+Dirichlet. The file is in text format representing  \texttt{W} 
+(the number of words) floats.
+Then multiply the mean vector by \texttt{W*value} 
+to get the Dirichlet parameter vector.
+i.e, the mean of the \texttt{W} values 
+in the Dirichlet parameter vector is \texttt{value}.
+\item[{-B}{dir[,file]}]  Same as \OptArg{-B}{value[,file]} but
+\texttt{value} is set to a default, currently 0.001
+(10 times the current minimum allowed for a Dirichlet).
+\item[{-B}{type[,file]}] 
+The other form of the \Opt{-B} option
+similar to the \Opt{-A} option.
+Use a prior beta of \texttt{type}
+``hdp'' ``hpdd'' or ``pdp''.  Similar to the \Opt{-A} option.
+\begin{Description}[hpdd]
+\item[hdp] phi is modelled with a Dirichlet Process
+with mean \texttt{beta} and concentration \texttt{bw} and 
+beta is modelled with a Dirichlet with concentration \texttt{bw0}
+by default symmetric (a uniform mean)
+or its mean can be set with the \texttt{file} optional argument above.
+Setting \texttt{file} to the reserved word ``data''
+uses the observed word frequencies as the mean.
+\item[hpdd] 
+phi is modelled with a Pitman-Yor Process
+with mean \texttt{beta}, discount \texttt{aw} and concentration \texttt{bw},
+and \texttt{beta} is modelled with a (truncated) GEM 
+and discount \texttt{aw0} and concentration \texttt{bw0}.
+This is the default.
+\item[pdp]
+ phi is modelled with a Pitman-Yor Process
+with mean \texttt{beta}, discount \texttt{aw} and concentration \texttt{bw},
+and beta is by default uniform,
+or its mean can be set with the \texttt{file} optional argument above.
+Setting \texttt{file} to the reserved word ``data''
+uses the observed word frequencies as the mean.
+This is not hierarchical because beta is constant.
+\end{Description}
+\item[\OptArg{-S}{var=value}]  Set variable \texttt{var} to float \texttt{value},
+where \texttt{var} can be one of:
+\begin{Description}[bdk]
+\item[a] discount parameter for the non-parametric distribution
+  on the theta, topic distribution per document.
+\item[b] concentration parameter for the non-parametric distribution
+  on theta, the topic distribution per document.
+\item[a0] discount parameter for the non-parametric distribution
+  on alpha, the prior for theta.
+\item[b0] concentration parameter for the non-parametric distribution
+  on alpha, the prior for theta.
+\item[aw] discount parameter for the non-parametric distribution
+  on phi, word distribution per topic.
+\item[bw] concentration parameter for the non-parametric distribution
+  on phi, word distribution per topic.
+\item[aw0] discount parameter for the non-parametric distribution
+  on beta, prior for phi.
+\item[bw0] concentration parameter for the non-parametric distribution
+  on beta, prior for phi.
+\item[ad] discount parameter for burstiness.
+\item[bdk] concentration parameter for burstiness, a constant initially
+     but subsequent sampling will allow a different value per topic.
+\end{Description}
+\end{Description}
+
+\subsection{Controlling sampling of hyperparameters}
+\begin{Description}[\OptArg{-t}{transfile}]\setlength{\itemsep}{0cm}
+\item[\OptArg{-D}{cycles,start}] 
+Start sampling \texttt{alpha} of the symmetric Dirichlet for alpha after
+\texttt{start} cycles and then repeat every \texttt{cycles} cycles.
+\item[\OptArg{-E}{cycles,start}] 
+Start sampling \texttt{beta} of the symmetric Dirichlet for beta after
+\texttt{start} cycles and then repeat every \texttt{cycles} cycles.
+\item[\OptArg{-F}{var}]
+Fix the variable \texttt{var} where
+it takes the value \textbf{alpha}, \textbf{beta} or one of the
+arguments to the \Opt{-S} option.
+\item[\OptArg{-G}{var,cycles,start}]
+Sample the variable \texttt{var} where
+it takes the value \textbf{alpha}, \textbf{beta} or one of the
+arguments to the \Opt{-S} option.
+The \texttt{start} and \texttt{cycles} integers are used as for
+the \Opt{-D} option.
+\end{Description}
+
+\subsection{General control}
+\begin{Description}[\OptArg{-t}{transfile}]\setlength{\itemsep}{0cm}
+\item[\OptArg{-c}{cycles}] 
+Do a checkpoint every this many \texttt{cycles}.
+This saves the output statistics and the parameter file
+adequate to do a restart with \OptArg{-r}{0} option.
+\item[\OptArg{-C}{cycles}] 
+Stop after this many \texttt{cycles}.
+Default is 100.
+Note \OptArg{-C}{0} should be used when one just wants reports,
+as the various output files (other than reports) will be left unaltered.
+\item[\OptArg{-d}{dots}] 
+For really big batches of data, print a 
+``.'' every \texttt{dots} documents within a single cycle.
+\item[\Opt{-e}]
+Reroute logging to the \File{stderr}.
+\item[\OptArg{-f}{format}] 
+Read input data from data formatted according to
+the type \texttt{format}.  Data is expected to come from
+an input file with name \File{DataStem.Suff} where
+\File{Suff} is an appropriate suffix.
+These are given with Input Files below.
+Allowed formats are:
+\texttt{ldac}, \texttt{witdit}, \texttt{docword}, 
+\texttt{bag}
+and \texttt{lst}.
+\item[\OptArg{-K}{topics}] 
+Set $T$ the maximum number of topics.
+Default is 10.
+\item[\OptArg{-M}{maxtime}] 
+Quit early when total training time exceeds this many seconds.
+\item[\OptArg{-N}{maxN,maxT}] 
+Set maximum for the Stirling number tables
+to count \texttt{maxN} and table count \texttt{maxT}.
+Default is 10000,1000.
+On collections with more than 20k documents, can require more.
+\item[\OptArg{-q}{threads}] If compiled with threading, enables
+this many threads.  Default is 1.
+\item[\OptArg{-r}{0}]
+Restart with all data.  Currently must use the \texttt{offset} equal to ``0''
+for a normal restart.
+\item[\OptArg{-r}{phi}]
+Another version of the \Opt{-r} option
+using the string ``phi'' as the argument.
+Restart but now fix the word by topic matrix
+to the previously estimated values saved at 
+\File{RepStem.phi},
+and the beta side is held constant and not sampled.
+Can significantly speed up testing or querying sometimes.
+\item[\OptArg{-r}{theta}]
+Second version of the \Opt{-r} option
+using the string ``phi'' as the argument.
+Restart but now fix the document by topic matrix
+to the previously estimated values saved at 
+\File{RepStem.theta} and \File{RepStem.testprob}.
+\item[\OptArg{-s}{seed}]
+Initialise the random number seed.
+\item[\Opt{-v}] Up verbosity by one increment.
+Starts at zero and currently understands 0-3.
+\item[\Opt{-x}] Enable use of exclude topics with \Opt{-Q}.
+\end{Description}
+
+\subsection{Testing and reports}
+\begin{Description}[\OptArg{-t}{transfile}]\setlength{\itemsep}{0cm}
+\item[\OptArg{-h}{Hold,arg}] 
+Do document completion testing on the test set.
+There are three styles of document completion implemented
+given by the \texttt{Hold} parameter.
+\begin{description}
+\item[dict] every \texttt{arg}-th
+word in the dictionary is held out in estimating
+and used for testing.  So if a word has dictionary index 
+\texttt{arg-1}, \texttt{2*arg-1}, \emph{etc.}, it is held out.
+\item[doc] every \texttt{arg}-th
+word is held out in estimating the latent variables (like theta)
+for the document and used instead for testing of perplexity.
+That is, words at document positions \texttt{arg-1}, \texttt{2*arg-1}, 
+\emph{etc.}
+\item[fract] then the \texttt{fract}
+proportion at the tail of the document is held out.  
+The initial proportion is used in estimating.
+\end{description}
+\item[\OptArg{-l}{Diag,cycles,start}] 
+Do a run-time estimation of the diagnostic \texttt{Diag}
+starting after the \texttt{start} cycle and then taking the
+estimate every \texttt{cycles} cycle.
+Diagnostics are:
+\begin{Description}[testprob]\setlength{\itemsep}{0cm}
+\item[alpha] 
+Estimate the prior topic probability vector.
+Stored in the \File{RepStem.alpha} file.
+Note useable with the 
+\OptArg{-A}{pdp} option on restart
+as the \File{RepStem.alpha} will be read,
+though  \texttt{a} and \texttt{b}
+will need to be set.
+\item[phi] 
+Estimate the word probability vector for each topic.
+Stored in the \File{RepStem.phi} file.
+If the model is not a symmetric Dirichlet model,
+then the word prior vector will be estimated and
+saved in the \File{RepStem.beta} file
+as well.
+Note useable with the 
+\OptArg{-B}{pdp} option on restart
+as the \File{RepStem.beta} will be read,
+though \texttt{aw} and \texttt{bw} will need to be set.
+\item[prog] 
+How often to do the standard diagnostic reports
+(default is every 5-th cycle).
+\item[sparse] 
+Estimate topic sparsity in the theta matrix for the
+words given in \File{DataStem.smap}.
+If \File{DataStem.smap} is not there then this defaults to all words.
+Note, the default can be quite wasteful for multicore, is it duplicates the theta matrix
+for each thread, so only do for small data sets.
+Results placed in \File{RepStem.smap}.
+The report gives ``topic/weight'' for topics including the word.
+\item[testprob] 
+Estimate the topic probability vector for each test document.  
+Stored in the \File{RepStem.testprob} file.
+\item[theta] 
+Estimate the topic probability vector for each training document.
+Stored in the \File{RepStem.theta} file.
+\end{Description}
+Note that for \texttt{Diag}=``testprob'' or ``theta'',
+an additional argument after \texttt{start} giving the lowerbound
+on probabilities.  Lower ones are dropped.
+\item[\OptArg{-L}{Diag,cycles,start}] 
+Do a diagnostic estimate \texttt{Diag} after
+all Gibbs sampling is complete.
+Sampling of the estimate starts after the \texttt{start} cycle 
+and goes for a total of \texttt{cycles} cycles
+(including the starting ones).
+Diagnostics are:
+\begin{Description}[class]\setlength{\itemsep}{0cm}
+\item[class] 
+Estimate class probabilities with ``true'' classes
+given in \File{DataStem.class} and then
+produce confusion matrix for the test data.
+Output to files
+\File{DataStem.cnfs} and \File{DataStem.pcnfs}.
+\item[like] 
+Estimate likelihood/perplexity on the test set
+using the standard (biased) document likelihood,
+or document completion if the \Opt{-h}
+option is used.
+Can also be instigated during run-time with the
+\Opt{-P} option.
+\end{Description}
+\item[{-o}{score[,count]}]  Scoring rule to pick top words for printing.
+Methods are `count', `idf', `cost' and `phi'.  Default is `idf'.
+Ranking done for top \texttt{count} words, default is 20.
+Methods are
+\begin{Description}
+\item[cost:] rank by proportion of this word in topic
+       minus estimated proportion assuming topic and word independent.
+\item[count:] rank by count in topic.
+\item[idf:] rank by fraction of the total occurrences of
+       this word  that are in this topic.
+\item[phi:] rank by computed phi value (if loaded).
+\end{Description}
+\item[\Opt{-O}] Report log likelihood, not log perplexity.  Both
+are done in base 2.
+\item[\Opt{-p}] Report topic coherency in the log file, 
+and save the detail (per topic) in the \File{RepStem.toppmi} file.
+This requires 
+a \File{DataStem.pmi} or \File{DataStem.pmi.gz} file exist
+in the right format.  This can be created with the 
+\Prog{mkmat.pl} and
+\Prog{cooc2pmi.pl} scripts in the scripts directory of the release.
+The format is a simple sparse matrix form with lines
+of the form ``N M PMI'' for word indices
+(offset by 0) N and M and PMI value.
+\emph{WARNING:}  the file \File{DataStem.pmi} needs to be specifically built for 
+the dataset as the word indices must align.
+By default, PMI computed for top 10 words.
+Give option twice, and PMI will be done for all top words
+ranked (as per the \Opt{-o} option).
+\item[\OptArg{-P}{secs}]  
+Calculate test perplexity (using document completion)
+every interval in \texttt{secs} seconds.  If Gibbs cycles are long,
+will report only after the cycle finishes.
+\item[\OptArg{-Q}{nres,file}]  
+submit list queries given in the file, and return \texttt{nres}
+results for each.  Must use the \OptArg{-r}{phi} option with
+a pre-estimated phi matrix (for efficiency).
+\item[\OptArg{-t}{size}]  Specify size of training set.  It takes the
+first \texttt{size} entries in the data set. Default is all the
+set minus the test data.
+\item[\OptArg{-T}{filestem}]  Specify a separate test set.  
+Assumes the same suffix as for \File{DataStem}.
+When using this, be sure to fix the training set size with 
+\OptArg{-t}{size} if you do not want to train on the full
+data set.
+\item[\OptArg{-T}{size}]  Specify size of test set.  It takes the
+\texttt{size} entries immediately following the training set. 
+Default is zero.  This option can be confused with the above, so do not use 
+filestems that are just integers.
+\item[\Opt{-V}]  load the dictionary from the
+\File{DataStem.tokens} file for use in reporting.  It has one token per line.
+Must have at least level two verbosity or this is ignored.
+\item[\Opt{-X}]  Instigate report on naive Bayes classification
+using the topic model and classes given in \File{DataStem.class} file.
+The report is a confusion matrix to file \File{RepStem.tbyc} built on
+the training data.
+\end{Description}
+
+\section{Input Files}
+%%%%%%%%%%%%%%%
+
+The following files provide details about the dataset.
+The filenames are constructed by adding a suffix to the data stem.
+The data (document+word) format itself can be one of four different
+formats and is specified with the \Opt{-f} option.
+\begin{Description}\setlength{\itemsep}{0cm}
+\item[\File{DataStem.class}] Class index for each document, one per line.  
+Optional file used with some reports instigated by
+\Opt{-X} or \OptArg{-L}{class} options.
+\item[\File{DataStem.dit}+\File{DataStem.wit}] Simple document index and word index files, both indices offset by 1, one index per line.  
+Words in the collection are listed by document.  The \File{DataStem.dit} file
+gives the document index, and the corresponding line in \File{DataStem.wit}
+gives the dictionary index.  
+\item[\File{DataStem.docword}] This format appears in some UCI data sets
+at\\\URL{http://archive.ics.uci.edu/ml/datasets/Bag+of+Words}.
+Word indices offset by 1.
+\item[\File{DataStem.ldac}] Standard LdaC format.  Word indices to the dictionary are offset by 0.
+\item[\File{DataStem.smap}] A list of word indices (offset by 0)
+about which one wants a sparsity report generated.
+The report is instigated by the
+\OptArg{-l}{sp} option.
+\item[\File{DataStem.tokens}] tokens/words in the dictionary, one per line.
+Optional file used with \Opt{-V} option.
+\item[\File{DataStem.txtbag}] default bag or list format for \Cmd{linkBags}{1} command of \texttt{text-bags}.  Word indices offset by 0.
+\end{Description}
+
+The various output files such as
+\File{RepStem.par} (Parameter and dimension output file)
+are also read on restart with the \OptArg{-r}{0} option.
+
+\section{Output Files}
+%%%%%%%%%%%%%%%
+
+The following files are output when the system checkpoints 
+or at the end of the run.
+These are built by adding a suffix to the report stem,
+\File{RepStem}.
+The first set of files are:
+\begin{Description}\setlength{\itemsep}{0cm}
+\item[\File{RepStem.alpha}] 
+If the alpha vector is being estimated 
+with the \Opt{-lalpha} option, then this will contain
+the estimated value.
+\item[\File{RepStem.beta}]  If a constant beta vector is specified
+using the \Opt{-u} option, this saves
+   the value, for possible use in a restart.
+Otherwise, if the phi matrix is being estimated 
+with the \Opt{-lphi} option
+and the beta vector is not fixed, then this will contain
+the estimated value.
+\item[\File{RepStem.cnfs}+\File{RepStem.pcnfs}]  
+Best prediction and probability vector confusion matrices
+built on the test data with the 
+\OptArg{-L}{class} command.
+\item[\File{RepStem.log}] Log file created if \Opt{-e} option not used.
+\item[\File{RepStem.par}] Parameter and dimensions file in simple ``var = value'' format.  These are detailed in the next section.
+\item[\File{RepStem.phi}] The Phi matrix written as a binary file:
+first $W$ (dictionary size), $T$ (topics), 
+$C$ (sample size) are written as 32 bit integers and
+then the full Phi matrix as native floats with $W$ as the minor index.
+Only generated with appropriate use of the
+\OptArg{-l}{phi} option.
+\item[\File{RepStem.smap}] Optional sparsity report on the 
+word indices listed in \File{DataStem.smap}.
+The report is instigated by the
+\OptArg{-l}{sp} option.
+\item[\File{RepStem.tbyc}]  Optional confusion matrix printed when
+the \Opt{-X} option is used.
+\item[\File{RepStem.toplst}] A simple text report giving the top word indices
+  for each topic.  If a hierarchical model in use, then the
+``-1'' topic is for the base distribution of words.
+Word indices are offset from 0.
+\item[\File{RepStem.toppmi}] A simple text report giving the top word indices
+and the associated mean PMI for the word.
+\item[\File{RepStem.topset}] Full diagnostic output for topics and their words
+instigated with a command sequence like ``-V -V -oidf,100''.
+\item[\File{RepStem.theta}] Estimated topic probabilities 
+for each training document
+written in a simple sparse form.  The class index
+(``-1'' or ``+1'' for binary classes, otherwise just the index)
+is also added if it exists.
+Topic indices are offset by 0.
+Only generated with appropriate use of the
+\OptArg{-l}{theta} option.
+\item[\File{RepStem.testprob}] 
+Like the \texttt{-ltheta} option but for the test documents.
+Only generated with appropriate use of the
+\OptArg{-l}{testprob} option.
+\end{Description}
+
+The second set of files gives the actual runtime statistics.
+Output matrices are in a simple readable sparse vector format
+the same as the \File{DataStem.docword} format.
+\begin{Description}\setlength{\itemsep}{0cm}
+\item[\File{RepStem.ndt}] Document by topic counts.
+\item[\File{RepStem.nwt}] Word by topic counts.
+\item[\File{RepStem.tdt}] Document by topic table counts if
+the Alpha side of the model is non-parametric.
+\item[\File{RepStem.twt}] Word by topic table counts if
+the Beta side of the model is non-parametric.
+\item[\File{RepStem.zt}] With no burstiness, gives topic
+index (offset by 0), one per line.  
+With burstiness, gives one ``z,r'' per line where ``z'' is the
+topic index (offset by 0) and ``r'' is the burst table indicator, 
+which is 1 if the word
+contributes to standard topic model statistics, and
+0 if burstiness modelling says the word is a burst
+so does not contribute to topic model  statistics.
+\end{Description}
+These files along with \File{RepStem.par} are input
+on a restart using \OptArg{-r}{0}.
+
+\section{The Parameter File}
+
+The parameter file has the following \emph{dimensions}:
+\begin{Description}[T]
+\item{N} -- number of words in the full collection,
+          summed over all documents.
+\item{NT} -- number of words in the training set,
+          summed over all training documents.
+\item{W} -- number of words in the dictionary.
+\item{D} -- number of documents in total.
+\item{TRAIN} -- number of documents to train on, is always the
+the first ones in the file.
+\item{TEST} -- number of documents to test on, is always the
+the last ones in the file.
+\item{T} -- maximum number of topics.
+\item{ITER} -- number of major cycles made last.
+\end{Description}
+
+In addition, the float parameters allowed to be specified with the
+\Opt{-F} and \Opt{-G} options are also given.
+Finally, the type of model for alpha as specified by the
+\Opt{-A} option is coded in the
+\texttt{PYalpha} variable. 
+It is 0 if the model is a Dirichlet,
+the LDA default.
+It is 1 for hdp, 2 for hpdd and 3 for pdp.
+Likewise for the \texttt{PYbeta} variable and the \Opt{-B} option.
+
+
+\section{Examples}
+%%%%%%%%%%%%%%%%%%
+
+\subsection{Basic running}
+
+These examples work as is on late model Linux, Macs and Windows.
+However, you need to replace the executable,
+\texttt{hca}, by the system dependent one,
+from the install directory where the \File{data/} directory is.
+For instance, on Windows that might be \texttt{hca/hca.exe}.
+
+Run basic LDA with default parameters
+and full parameter fitting on the full dataset and no testing,
+sending logging to \Prog{stderr}.
+\begin{verbatim}
+   hca -v -e -K20 -Adir -Bdir -C100 data/ch c1
+\end{verbatim}
+Alternatively, 
+run basic HDP-LDA with parameter fitting on the full dataset and no testing,
+sending logging to \Prog{stderr}.
+\begin{verbatim}
+   hca -v -e -K20 -B0.001 -C100 data/ch c1
+\end{verbatim}
+The command lines mean:
+\begin{description}
+\item[``-v'':] use level one verbosity;
+\item[``-e'':] send the log file to  \texttt{stderr},
+not to ``c1.log'';
+\item[``-K20'':] use 20 topics 
+(the truncation level if using \OptArg{-A}{hpdd}));
+\item[``-Adir'':]  use a symmetric Dirichlet prior on topic probability
+vectors for documents with default value;
+\item[``-Bdir'':]  use a symmetric Dirichlet prior on word probability
+vectors (i.e., topics) with default value;
+\item[``-B0.001'':]  use a symmetric Dirichlet prior on word probability
+vectors (i.e., topics) with this value;
+\item[``-C100'':] run for 100 cycles;
+\item[``data/ch'':] stem for data file;
+\item[``c1'':] stem for results file.
+\end{description}
+Consider the HDP-LDA version.
+Before the runtime logging starts, initial details are printed:
+\begin{verbatim}
+Version 0.5, H.Pitman-Yor sampler for topics, Dirichlet sampler for words
+Sampling pars: b(3), b0(3), betatot(4),
+Setting seed = 1403582987
+Read from ldac file: D=395, W=4258, N=84010
+S-table 'a, ad,  all zero PYP': a=0.000000, N=812/1000, M=100/1000, +S+U/V float mem=626k
+mem   = 1.3 (MByte)
+seed  = 1403582987
+N     = 84010
+W     = 4258
+D     = 395
+TRAIN   = 395
+TEST    = 0
+T     = 20
+ITER  = 100
+PYbeta  = 0
+betatot  = 4.258000 # total over W=4258 words
+PYalpha  = 2
+a     = 0.000000
+b     = 10.000000
+a0     = 0.000000
+b0     = 10.000000
+Initialised with 20 classes
+\end{verbatim}
+Note the following:
+\begin{itemize}
+\item
+the \texttt{betatot} value is the total of the input
+\texttt{beta} (0.001) over the $W=4258$ words;
+internally the \texttt{betatot} is maintained and subsequently
+sampled;
+\item
+the ``Sampling pars:'' line indicates
+hyperparameters being sampled, which  are 
+\texttt{b}, \texttt{b0}, \texttt{betatot}, with
+\texttt{b} and \texttt{b0} being sampled every 3 major cycles and \texttt{betatot}
+every 4 major cycles;
+\item
+in this case \texttt{a} and \texttt{a0} are not sampled because they are fixed at 0,
+meaning the alpha side is modelled with a Dirichlet process;
+\item
+the memory allocated is approximately 1.3Mb,
+actual usage will vary with stack memory and some items not recorded;
+\item
+the seed for the random number generator is 1403582987
+so use ``-s1403582987'' to repeat the same sampling;
+\item
+there are 395 documents, 4258 different words/tokens in the dictionary and
+a total of 84010 words/tokens in the documents;
+\item
+\texttt{PYbeta=0} means the beta side is a Dirichlet;
+\item
+\texttt{PYalpha=2}  means the alpha side is a truncated GEM prior at the top
+level and Pitman-Yor process or Dirichlet process at the document level;
+\item
+and \texttt{TEST=0} means there is no test data.
+\end{itemize}
+By default, every 5 cycles, a short report is printed:
+\begin{verbatim}
+[26/05/2014:10:01:38] cycles:  81 82 83 84 85
+log_2(perp)=11.5182,9.9503
+Pars:  b=2.041296, b0=3.007822, betatot=301.019289
+\end{verbatim}
+The report frequency is modified with the \OptArg{-l}{prob,...}
+option, and the report can be extended by adding verbosity with 
+ \Opt{-v}.  The entry in square brackets is the system clock time
+at the start of cycle 81.
+Here cycles 81-85 are run.
+The two perplexities reported are normalised per token and then given in
+log to base 2.  The first is from the posterior probability with all
+real-valued probability vectors marginalised out using Pitman-Yor process
+theory but with the latent counts
+(counts of tables, not full table configurations) included.
+The second is the running total of word probabilities encountered
+during sampling.  This does not include the probability cost of latent
+variables (for instance, the topics) so always less.
+After \texttt{Pars:} appears the list of hyperparameters being sampled and their
+current values.  
+% Note the parameter \texttt{bdk}, the
+% concentration for the bursiness per topic, is
+% a vector over topics, so only the first entry is printed.
+
+Adding an extra level of verbosity using an additional \Opt{-v}, one gets
+a brief one line report for every hyperparameter being sampled,
+such as
+\begin{verbatim}
+  myarmsMH(b) = 3.272891<-3.432078, w 37 calls 
+\end{verbatim}
+This means the adaptive rejection sampler took 37 calls
+to sample \texttt{b}.  The initial value was 3.432078
+and the final value was 3.272891.
+This line will be printed every time a sampling is done, sometimes multiple
+ones per major Gibbs cycle.
+Moreover, topic probabilities are printed.
+These are estimated (with standard smoothing) from
+training data.  For instance,
+\begin{verbatim}
+probs =  0.041541 0.062400 0.083437 0.060447 0.025652 0.069235 ....
+conc. = 10.225621, empty = 0, exp.ent = 19.049888
+\end{verbatim}
+The three diagnostics give additional details about the probabilities.
+The concentration (inverse of variance) applies to these,
+and it is computed differently depending on the model.
+If some topics have no data in them, \texttt{empty} will tell how much.
+The effective number of topics is 19.049888,
+which is the exponential of the entropy of the probability vector
+(ignoring empty topics).
+It should always be less than the truncation level.
+
+At the end, a final report is printed.  
+\begin{verbatim}
+[29/05/2014:21:07:27] Finished after 100 cycles on average of 0.193804+0.013074(s) per cycle
+
+Topic 6/0 p=12.54% ws=76.1% ds=14.2% ew=584 ed=24 da=10 t1=4 ud=0.9344 pd=0.6448 co=-1.4%
+Topic 3/1 p=6.82% ws=76.8% ds=39.0% ew=790 ed=56 da=6 t1=3 ud=0.8126 pd=0.7304 co=-0.8%
+Topic 14/2 p=5.73% ws=83.2% ds=82.0% ew=442 ed=93 da=12 t1=5 ud=0.9223 pd=0.7350 co=-0.3%
+...
+
+Average topicXword sparsity = 82.93%
+Average docXtopic sparsity = 66.14%
+Underused topics = 0.0%
+
+probs =  0.037662 0.031478 0.034289 0.020517 0.043002 0.097527 0.022766 0.068859 0.114952 ...
+conc. = 1.784346, empty = 0, exp.ent = 15.296125
+log_2(train perp) = 11.456566
+\end{verbatim}
+The figures give 0.19380 seconds per cycle for the Gibbs sampler
+and 0.01307 seconds per cycle for the adative rejection sampling
+of hyperparameters.  Note these figures are not collected
+correctly for the multi-core version.
+Some basic details for the topics are given too.
+These are listed in terms of decreasing proportion.
+Details are as follows:
+\begin{description}
+\item[p:] proportion of tokens tagged with this topic;
+\item[ws:] word sparsity, proportion of words occurring zero times with this topic;
+\item[ds:] document sparsity, proportion of documents having zero occurrences of this topic;
+\item[ew:] effective number of words, expenential of the entropy of the word distribution;
+\item[ew:] effective number of documents, expenential of the entropy of the document distribution (given topic);
+\item[da:] documents with proportion for topic greater than 1/sqrt($T$).
+\item[t1:] documents with this topic as most common.
+\item[ud:] Hellinger distance to the uniform distribution.
+\item[pd:] Hellinger distance to the (training) population word distribution;
+\item[co:] coherence as per Mimno, Wallach, Talley, Leenders and McCallum, EMNLP 2011.
+\end{description}
+So the first topic has 6/0 given.  This means it was index 6 in the
+run but is rank 0 in terms of proportion.  In the saved data file
+it will be topic 6.  With more verbosity, top topic words will be given
+as well ranked according to the \Arg{-o} option.
+Totals for some of the topics are also given:
+``Average topicXword sparsity'' is the mean of the word sparsities
+(\texttt{ws}),  ``Average docXtopic sparsity''
+gives the mean of the document sparsities (\texttt{ds}),
+and the number of underused topics is the
+percentage of topics whose observed proportion
+is less than 1/T/100 or with less than 5 occurrences.
+
+The \texttt{log\_2(train perp)} figure is equivalent
+to the \texttt{log\_2(perp)} figure 
+above because there is no test data.
+At this point, a number of data files will have been
+written, the same as done with any checkpoint.
+The main one is the parameter file
+\File{c1.par} which gives all the dimensions as well
+as the final values of the hyper-parameters.
+Note the \texttt{probs} are also included, but these
+are for information only.
+The others can be used to restart the run.
+
+If you have the multicore version compiled, 
+and you have an 8-core CPU, then run with 8 threads:
+\begin{verbatim}
+   hca -v -e -K20 -B0.001 -C100 -q8 data/ch c1
+\end{verbatim}
+\begin{description}
+\item[``-q8'':] use 8 threads for Gibbs sampling.
+\end{description}
+This just repeats the above but should be faster!
+
+\subsection{Restart and print words for the topics}
+Restart from checkpoint after the previous run but run no cycles.
+Input the tokens from
+\File{data/ch.tokens}, and print top 10 words for each topic.
+\begin{verbatim}
+   hca -v -v -r0 -e -V -C0 data/ch c1
+\end{verbatim}
+The command line means:
+\begin{description}
+\item[``-v -v'':] use level two verbosity;
+\item[``-r0'':] restart from document 0, i.e., on all documents;
+\item[``-V'':] input the tokens from
+``data/ch.tokens,'' and print top 10 words for each topic.
+Note must have at least level two verbosity;
+\item[``-C0'':] do not run any cycles, just do reporting.
+\end{description}
+After printing initial details, this will print two
+sets of details.
+The first is a list of top topic words (if verbosity is greater than 1)
+and topic diagnostics. 
+Topics are printed in decreasing order of occurrence.
+The extra verbosity level and the \Opt{-V}
+means that topic words will be printed out too.
+
+For more detail to the \File{RepStem.topset} file, use:
+\begin{verbatim}
+   hca -v -v -r0 -e -V -V -oidf,100 -C0 data/ch c1
+\end{verbatim}
+The command line means:
+\begin{description}
+\item[``-V -V'':] extra \Opt{-V} means create the 
+\File{RepStem.topset} file of details.
+\item[``-oidf,100'':] means report on up to 100 words for each topic,
+and words ranked by the \texttt{idf} score.
+\end{description}
+The first two lines give brief column heads for the topic and word lines.
+The scores match those printed with diagnostics.
+
+\subsection{Produce sparsity mappings and document topic probabilities}
+Restart again and build a topic probability vector for each document,
+as well as sparsity mappings for the words in 
+\File{data/ch.smap} file.
+This you need to create/edit ahead of time.
+This must run a number of cycles because the estimates are done 
+during the Gibbs sampling.
+\begin{verbatim}
+hca -v -r0 -e -lsparse,2,1 -ltheta,2,1,0.001 -C20 data/ch c1
+\end{verbatim} 
+\begin{description}
+\item[``-lsparse,2,1'':] sample for sparsity every 2nd cycle
+starting at the 1st.
+\item[``-ltheta,2,1,0.001'':] sample probabilities per document
+(theta) every 2nd cycle
+starting at the 1st.
+Only report probabilities above 0.001.
+\item[``-C20'':] sampling done for 20 cycles.
+\end{description}
+Now view the sparsity report at \File{c1.smap} and
+the topic probabilities at \File{c1.theta},
+and the values saved in the parameter file \File{c1.par}.
+Again, add the \OptArg{-q}{8} option to run this faster,
+with 8 threads (if you have 8 cores).
+
+Read lines in the sparsity report, \File{c1.smap}, as follows:
+\begin{verbatim}
+--(12): 5/2.6 14/1.3 19/219.0 perp=1.149816
+\end{verbatim} 
+Token with index 12 occurs in topics 5, 14 and 19.
+It has 2.6 counts (its a sample average so counts can be a fraction)
+in topic 5 and 219.0 in topic 19.
+The effective number of topics using this token is 1.149816.
+This is measured as the exponential of the entropy of the topic distribution 
+(i.e., probability of topic given the single word and assuming topics
+are equally likely).
+
+Read lines in the topic probabilities report, \File{c1.theta}, as follows:
+\begin{verbatim}
+15: 16:0.006699 17:0.088948 19:0.902410
+\end{verbatim} 
+Document 15 has 0.006699 for topic 15 and 0.902410 for topic 17.
+The three topics only add to 0.998057 because some
+smaller topics must have been dropped.
+
+\subsection{Run with testing}
+
+Testing discussed here only tests on the latest sample done with
+Gibbs.  More sophisticated testing, described later
+first estimates the model parameters over a number of Gibbs
+iterations, and then perform testing using the estimates.
+This is described in later subsections.
+
+First run basic LDA with training and parameter fitting on a subset
+and testing on the final 100 documents.  
+The training subset is the full dataset minus the test data.
+Logging now to \File{c1.log}.
+Checkpoint every 20 cycles
+(note, we usually only do this for cycles taking over 10 minutes each).
+\begin{verbatim}
+hca -v -K20 -C100 -c20 -T100 data/ch c1
+\end{verbatim}
+Again run multi-core with \OptArg{-q}{8} if needed.
+\begin{description}
+\item[``-c20'':] do a checkpoint with any reporting every
+20 cycles.
+\item[``-T100'':] use the last 100 documents for testing,
+so the first (datasetsize-100) are used for training.
+The documents must be ordered so the test data is at the end.
+Alternatively, a file stem can be given if test data is in a 
+separate file, so loaded from there.
+\end{description}
+View the end of the log file to get the test perplexity,
+which is printed after ``log\_2(test perpML)''.
+
+Now restart but use document completion (every 4th word) to 
+get perplexity, with no more Gibbs cycles.
+Without \Opt{-h} the default is to use
+a standard likelihood calculation so will be biased.
+\begin{verbatim}
+hca -v -e -r0 -C0 -hdoc,4 -T100 data/ch c1
+\end{verbatim}
+\begin{description}
+\item[``-hdoc,4'':] hold out every 4-th word in
+the document.
+\item[``-T100'':] the test set size must be repeated, since it is not
+reloaded with the restart.
+\end{description}
+View the end of the log file to get the test perplexity,
+which is printed after ``log\_2(test perpHold)''.
+Note it is also recorded in the parameter file.
+
+Restart and record the 
+PMI and the classification details on test data.
+\begin{verbatim}
+hca -v -v -V -r0 -C0 -Llike,0,0 -X -p -T100 data/ch c1
+\end{verbatim}
+\begin{description}
+\item[``-Llike,0,0'':] prevent it 
+doing test likelihood calculations, which are potentially slow
+on larger data sets.
+\item[``-X'':] load up class data from \File{data/ch.clas} file to
+enable classification on test data.
+\item[``-p'':] initiate PMI calculation.
+\end{description}
+The PMI data has a value printed for each topic as well as a 
+final average.  It bases its calculations on the matrix
+\File{data/ch.pmi.gz} created explicitly for this test set.
+For other datasets, you will need to download prepared
+PMI matrices from the project homepage.
+The PMI output in the log file 
+adds a PMI figure at the end of the second set of
+diagnostics:
+\begin{verbatim}
+Topic 0 stats: p=3.16%, ws=86.3%, ds=71.4%, pmi=2.565,
+Topic 1 stats: p=6.73%, ws=81.7%, ds=76.2%, pmi=0.825,
+Topic 2 stats: p=3.59%, ws=85.2%, ds=72.9%, pmi=1.392,
+\end{verbatim}
+Moreover, the general diagnistics get an extra line:
+\begin{verbatim}
+Average PMI = 0.602
+\end{verbatim}
+
+\subsection{Estimating model parameters}
+
+The assumes a run has already been done.
+Now we restart and initiate estimation.
+\begin{verbatim}
+hca -v -e -r0 -C100 -lphi,3,1 -ltheta,3,1 -lalpha,3,1 data/ch c1
+\end{verbatim}
+\begin{description}
+\item[``-lalpha,3,1'':] estimate the \texttt{alpha} vector if
+the Alpha side is non-parametric, and save
+in the \File{c1.alpha} file.
+Estimation starts after the 1st cycle and a sample is added to the
+average every 3 cycles,
+that is, 1,4,7,...,94,97.
+\item[``-lphi,3,1'':] estimate the \texttt{phi} matrix, and if
+the Beta side is non-parametric, then also estimate the
+\texttt{beta} vector.
+Saved as the \File{c1.phi} and \File{c1.beta} files respectively.
+Estimation as before.
+\item[``-ltheta,3,1'':] estimate the \texttt{theta} matrix
+and save as the \File{c1.theta} file.
+Estimation as before.
+\end{description}
+The files \File{c1.alpha} and \File{c1.beta} are text but
+the file \File{c1.phi} is binary.
+The file \File{c1.theta} is written in a readable sparse form.
+
+\subsection{Burstiness}
+
+The burstiness version significantly improves everything.
+Our best bet, currently, is to run
+with optimisation of the hyperparameters:
+\begin{verbatim}
+hca -v -v -e -K20 -C100 -Sbdk=100 -Sad=0.5 data/ch c1
+\end{verbatim}
+\begin{description}
+\item[``-Sbdk=100'':]  burstiness document concentration is different
+for every topic.  This initialises all of them to 100.
+Default has no burstiness.
+\item[``-Sad=0.5'':] burstiness document discount set to 
+0.5, same for all topics.  Default is zero.
+\end{description}
+The initial discount for the bursty topics is
+0.5.   The concentration we set quite high initially, 
+and these will be sampled separately with
+each topic in batches, so \texttt{bdk} is a vector in the
+parameter file.
+The hyperparameter sampling slows it down quite a bit but seems to
+make a significant difference.  Unused topics sometimes
+get a very low concentration.
+Alternatively, fix the burstiness discount with 
+\OptArg{-F}{ad} and continue sampling burstiness concentration only,
+which is quite a lot faster.
+Note burstiness works well with multi-core as does 
+sampling of hyperparameters.
+
+Diagnostics reported for burstiness, printed at the end, are as follows:
+\begin{verbatim}
+Burst report:  multis=55.45%, tables=79.57%, tbls-in-multis=63.15%
+\end{verbatim}
+These are:
+\begin{description}
+\item[multis:] percentage of tokens in documents that occur more than
+once.  Only these are affected by burstiness processing. 
+So (100-\texttt{multis}) is proportion of tokens unique in
+their document.  
+\item[tables:] percentage of data being passed up by the burstiness
+sub-module to the topic model.  
+Note 100\% of the  (100-\texttt{multis})\% unique tokens will
+be passed up as unique tokens always go to the topic model.
+Of the remaining \texttt{multis}\% tokens, only 
+\texttt{tbls-in-multis}\% get passed up.
+\item[tbls-in-multis:] the percentage of 
+non-unique words in documents that are passed up by the burstiness
+sub-module to the topic model.  
+\end{description}
+
+
+\section{Errors}
+
+There is some error reporting on failure.
+
+If the software quits during a run on larger data with an
+error message like:
+\begin{verbatim}
+    S_V(N,M,A) tagged 'XXX' hit bounds (BN,BM)
+\end{verbatim}
+for integers \texttt{N,M} and label \texttt{XXX} then you
+need to increase the bounds \texttt{BN,BM}.
+If only the \texttt{BM} bound is violated,
+then set \texttt{BN} to its default (10000) and increase
+\texttt{BM} to, say 5000 (your choice) with the
+option \OptArg{-N}{10000,5000}.
+The \texttt{BN} bound should only be violated
+when the Beta side table is affected,
+in which case the label will be
+XXX=''SB, topicXword PYP".
+Now increase \texttt{BN} to, say 30000 (your choice) with the
+option \OptArg{-N}{30000,1000},
+leaving \texttt{BM} as it was.
+
+For other errors, please report to the maintainer.
+Best bet is to recompile 
+with ``MYDEBUG=-g'' set in the Makefile
+and possibly run under a memory checker to get details of
+the reason for the crash.
+
+\section{See Also}
+%%%%%%%%%%%%%%%%%%
+
+The command \Cmd{linkBags}{1} is available from  \Prog{text-bags} at
+\URL{https://github.com/wbuntine/text-bags}
+and was previously released at \URL{http://mloss.org}.
+The extended library \Prog{libstb}, parts of which are included, is available
+individually from \URL{http://mloss.org} also at
+\URL{https://github.com/wbuntine/libstb} .
+
+
+\section{Version}
+%%%%%%%%%%%%%%%%%
+
+This programme is version \Version\ of \Date.
+This incorporates parts of the library \Prog{libstb} version 1.8
+also of \Date.
+
+\section{License and Copyright}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{description}
+\item[Copyright] \copyright\ 2011-2014, Prof.~Wray Buntine, 
+  NICTA, Canberra, Australia (to 2013), and Monash
+University (from 2014),
+     \Email{wray.buntine@monash.edu}.
+Some parts also by Dr.\ Jinjing Li (2013) and 
+Mr.\ Swapnil Mishra (2013-2014).
+
+\item[License]  This Source Code Form is subject to the terms of the Mozilla 
+ Public License, v. 2.0. If a copy of the MPL was not
+ distributed with this file, You can obtain one at
+      \URL{http://mozilla.org/MPL/2.0/}.
+\end{description}
+
+\section{Author}
+%%%%%%%%%%%%%%%%
+
+\noindent
+Prof.~Wray Buntine                     \\
+Email: \Email{Wray.Buntine@monash.edu}  
+
+Some parts also done by Dr.\ Jinjing Li and 
+Mr.\ Swapnil Mishra.
+
+\LatexManEnd
+
+\end{document}
+

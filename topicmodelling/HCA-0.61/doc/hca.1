@@ -1,0 +1,1623 @@
+'\" t
+.\" Manual page created with latex2man on Wed Sep 10 10:29:06 EST 2014
+.\" NOTE: This file is generated, DO NOT EDIT.
+.de Vb
+.ft CW
+.nf
+..
+.de Ve
+.ft R
+
+.fi
+..
+.TH "HCA" "1" "2014/09/10" "Data Analysis Tools " "Data Analysis Tools "
+.SH NAME
+
+.PP
+hca
+is research software 
+that does various versions of non\-parametric topic models using Gibbs sampling including LDA, HDP\-LDA, NP\-LDA, all with/without burstiness modelling. Various diagnostics, ``document completion\&'' testing and coherence measurements with PMI are also supported. The code 
+runs on multi\-core getting about 50% efficiency with 8 cores. 
+.PP
+.SH SYNOPSIS
+
+.PP
+hca
+[\fB\-?\fP]
+[\fB\-?\fP\fIArg\fP]
+\fIDataStem\fP
+\fIRepStem\fP
+.PP
+.SH DESCRIPTION
+
+hca
+reads the collection of files with stem 
+\fIDataStem\fP
+that form the input set of data. 
+When checkpointing, or at termination, the output is written 
+to files with stem \fIRepStem\fP\&.
+On restart with the \fB\-r\fP\fI0\fP
+option, some of these 
+are also read initially to restore the previous state. 
+A log of the run is reported to stderr
+if the 
+\fB\-e\fP
+option is used. By default, the log goes to 
+RepStem.log\&.
+.PP
+The programme is research software, so not all options 
+or combinations of options work correctly. 
+Note that in this release, all the more experimental features 
+have been stripped, so this release contains 
+only moderately well tested components. 
+Note also, this is not intended to be code that others could easily 
+modify. In order to get performance, to provide all the features, 
+and to run multi\-core, the code is quite convoluted. 
+Researchers seeking simple code they can experiment and 
+modify themselves should request a cutdown version from the author. 
+.PP
+The programme runs a Gibbs sampler for a variety of 
+non\-parametric topic models 
+including HDP\-LDA. 
+The model selected has three parts: 
+.TP
+alpha: 
+this is the prior on topic vector (theta) for each document. 
+LDA has a simple symmetric Dirichlet with parameter alpha 
+and the vector has dimension T (the number of topics). 
+.TP
+beta: 
+this is the prior on word vector (phi) for each topic. 
+LDA has a simple symmetric Dirichlet with parameter beta 
+and the vector has dimension W (the number of words). 
+.TP
+burst: 
+this is the burstiness component which has 
+a document specific variant of the word vector for 
+each topic. This is not used by default. 
+.PP
+These parts are set using the 
+\fB\-S\fP,
+\fB\-A\fP
+and \fB\-B\fP
+options. 
+.PP
+There are various model parameters, notably the 
+discount and concentrations for the different Pitman\-Yor 
+processes in the model. 
+These are usually sampled using Adaptive Rejection Sampling. 
+They are also kept bounded using constraints coded 
+into the util/dimdir.h
+header file. 
+So when a parameter fails to change, check the sampling 
+by increasing verbosity and you may observe the value tries to 
+change but doesn\&'t. 
+.PP
+The programme uses generalised second order Stirling numbers 
+with the library extracted from libstb
+version 1.8 
+released at \fBhttps://github.com/wbuntine/libstb\fP\&.
+This is initialised with predefined bounds on the tables, 
+and these can be modified with the \fB\-N\fP
+option. 
+This should be used for collections with larger numbers of 
+documents, but its best to run first and on 
+error, increase the bounds. 
+.PP
+.SH OPTIONS
+
+.PP
+Options have a single letter followed by a possible 
+single argument. Options are grouped under 
+the following functions: 
+\fIsetting of hyperparameters\fP,
+\fIcontrolling sampling of hyperparameters\fP,
+\fIgeneral control\fP,
+and 
+\fItesting and reports\fP
+.PP
+.SS SETTING UP THE MODEL AND HYPERPARAMETERS
+For these, theta
+is a vector for each document representing the 
+topic proportions and 
+phi
+is a vector for each topic representing the 
+word proportions. The task of the system is to estimate these. 
+The vector theta and its various priors and parameters is the Alpha side 
+and the vector phi and its various priors and parameters is the Beta side. 
+All the scalar parameters can be set using the 
+\fB\-S\fP\fIvar=value\fP
+option 
+and thereafter fixed using the \fB\-F\fP\fIvar\fP
+option 
+or by default sampled 
+using adaptive rejection sampling. 
+.PP
+.TP
+{\-A}{value[,file 
+}] Use a symmetric Dirichlet prior on theta 
+using this value
+for each dimension. The value must be a positive float. With the optional file
+argument, the file 
+specifies the probability vector to use as the mean vector of the 
+Dirichlet. The file is in text format representing T
+(the number of topics) floats. 
+Then multiply the mean vector by T*value
+to get the Dirichlet parameter vector. 
+i.e, the mean of the T
+values 
+in the Dirichlet parameter vector is value\&.
+.TP
+{\-A}{dir[,file 
+}] Same as \fB\-A\fP\fIvalue[,file]\fP
+but 
+value
+is set to a default, 
+0.05*ave\-len/T
+where 
+ave\-len
+is the average document length in the training set. 
+.TP
+{\-A}{type[,file 
+}] This other version of the 
+\fB\-A\fP
+option changes the Alpha side 
+Dirichlet on theta to a Pitman\-Yor process, thus 
+allowing estimation of hierarchical prior. 
+It defines a distribution on theta and its prior mean (a vector) 
+alpha
+of type
+as follows: 
+.RS
+.TP
+hdp 
+theta is modelled with a Dirichlet Process 
+with mean alpha
+and concentration b,
+and alpha is modelled with a symmetric Dirichlet with concentration 
+b0\&.
+If the file
+optional argument is used 
+then it specifies an input file giving the 
+mean of the Dirichlet over alpha\&.
+By default the mean is a uniform vector. 
+.TP
+hpdd 
+theta is modelled with a Pitman\-Yor Process 
+with mean alpha,
+discount a
+and concentration b,
+and alpha is modelled with a (truncated) GEM 
+with discount a0
+and concentration b0\&.
+This is the default. 
+The file
+optional argument is ignored. 
+.TP
+pdp 
+theta is modelled with a Pitman\-Yor Process 
+with mean alpha,
+discount a
+and concentration b,
+and the alpha vector is uniform. 
+This is not hierarchical because alpha is constant. 
+If the file
+optional argument is used 
+then it specifies alpha\&.
+.RE
+.RS
+.PP
+.RE
+.TP
+{\-B}{value[,file 
+}] Use a symmetric Dirichlet prior with 
+this value
+for each dimension. 
+The value must be a positive float. 
+\fIWarning:\fP
+the value stored internally and printed is the total of this over the 
+number of words W\&.
+With the optional file
+argument, the file 
+specifies the probability vector to use as the mean vector of the 
+Dirichlet. The file is in text format representing W
+(the number of words) floats. 
+Then multiply the mean vector by W*value
+to get the Dirichlet parameter vector. 
+i.e, the mean of the W
+values 
+in the Dirichlet parameter vector is value\&.
+.TP
+{\-B}{dir[,file 
+}] Same as \fB\-B\fP\fIvalue[,file]\fP
+but 
+value
+is set to a default, currently 0.001 
+(10 times the current minimum allowed for a Dirichlet). 
+.TP
+{\-B}{type[,file 
+}] 
+The other form of the \fB\-B\fP
+option 
+similar to the \fB\-A\fP
+option. 
+Use a prior beta of type
+``hdp\&'' ``hpdd\&'' or ``pdp\&''\&. Similar to the \fB\-A\fP
+option. 
+.RS
+.TP
+hdp 
+phi is modelled with a Dirichlet Process 
+with mean beta
+and concentration bw
+and 
+beta is modelled with a Dirichlet with concentration bw0
+by default symmetric (a uniform mean) 
+or its mean can be set with the file
+optional argument above. 
+Setting file
+to the reserved word ``data\&'' 
+uses the observed word frequencies as the mean. 
+.TP
+hpdd 
+phi is modelled with a Pitman\-Yor Process 
+with mean beta,
+discount aw
+and concentration bw,
+and beta
+is modelled with a (truncated) GEM 
+and discount aw0
+and concentration bw0\&.
+This is the default. 
+.TP
+pdp 
+phi is modelled with a Pitman\-Yor Process 
+with mean beta,
+discount aw
+and concentration bw,
+and beta is by default uniform, 
+or its mean can be set with the file
+optional argument above. 
+Setting file
+to the reserved word ``data\&'' 
+uses the observed word frequencies as the mean. 
+This is not hierarchical because beta is constant. 
+.RE
+.RS
+.PP
+.RE
+.TP
+\fB\-S\fP\fIvar=value\fP
+ Set variable var
+to float value,
+where var
+can be one of: 
+.RS
+.TP
+a 
+discount parameter for the non\-parametric distribution 
+on the theta, topic distribution per document. 
+.TP
+b 
+concentration parameter for the non\-parametric distribution 
+on theta, the topic distribution per document. 
+.TP
+a0 
+discount parameter for the non\-parametric distribution 
+on alpha, the prior for theta. 
+.TP
+b0 
+concentration parameter for the non\-parametric distribution 
+on alpha, the prior for theta. 
+.TP
+aw 
+discount parameter for the non\-parametric distribution 
+on phi, word distribution per topic. 
+.TP
+bw 
+concentration parameter for the non\-parametric distribution 
+on phi, word distribution per topic. 
+.TP
+aw0 
+discount parameter for the non\-parametric distribution 
+on beta, prior for phi. 
+.TP
+bw0 
+concentration parameter for the non\-parametric distribution 
+on beta, prior for phi. 
+.TP
+ad 
+discount parameter for burstiness. 
+.TP
+bdk 
+concentration parameter for burstiness, a constant initially 
+but subsequent sampling will allow a different value per topic. 
+.RE
+.RS
+.PP
+.RE
+.PP
+.SS CONTROLLING SAMPLING OF HYPERPARAMETERS
+.RE
+.TP
+\fB\-D\fP\fIcycles,start\fP
+ Start sampling alpha
+of the symmetric Dirichlet for alpha after 
+start
+cycles and then repeat every cycles
+cycles. 
+.TP
+\fB\-E\fP\fIcycles,start\fP
+ Start sampling beta
+of the symmetric Dirichlet for beta after 
+start
+cycles and then repeat every cycles
+cycles. 
+.TP
+\fB\-F\fP\fIvar\fP
+ Fix the variable var
+where 
+it takes the value \fBalpha\fP,
+\fBbeta\fP
+or one of the 
+arguments to the \fB\-S\fP
+option. 
+.TP
+\fB\-G\fP\fIvar,cycles,start\fP
+ Sample the variable var
+where 
+it takes the value \fBalpha\fP,
+\fBbeta\fP
+or one of the 
+arguments to the \fB\-S\fP
+option. 
+The start
+and cycles
+integers are used as for 
+the \fB\-D\fP
+option. 
+.PP
+.SS GENERAL CONTROL
+.TP
+\fB\-c\fP\fIcycles\fP
+ Do a checkpoint every this many cycles\&.
+This saves the output statistics and the parameter file 
+adequate to do a restart with \fB\-r\fP\fI0\fP
+option. 
+.TP
+\fB\-C\fP\fIcycles\fP
+ Stop after this many cycles\&.
+Default is 100. 
+Note \fB\-C\fP\fI0\fP
+should be used when one just wants reports, 
+as the various output files (other than reports) will be left unaltered. 
+.TP
+\fB\-d\fP\fIdots\fP
+ For really big batches of data, print a 
+``.\&'' every dots
+documents within a single cycle. 
+.TP
+\fB\-e\fP
+ Reroute logging to the stderr\&.
+.TP
+\fB\-f\fP\fIformat\fP
+ Read input data from data formatted according to 
+the type format\&.
+Data is expected to come from 
+an input file with name DataStem.Suff
+where 
+Suff
+is an appropriate suffix. 
+These are given with Input Files below. 
+Allowed formats are: 
+ldac,
+witdit,
+docword,
+bag
+and lst\&.
+.TP
+\fB\-K\fP\fItopics\fP
+ Set T the maximum number of topics. 
+Default is 10. 
+.TP
+\fB\-M\fP\fImaxtime\fP
+ Quit early when total training time exceeds this many seconds. 
+.TP
+\fB\-N\fP\fImaxN,maxT\fP
+ Set maximum for the Stirling number tables 
+to count maxN
+and table count maxT\&.
+Default is 10000,1000. 
+On collections with more than 20k documents, can require more. 
+.TP
+\fB\-q\fP\fIthreads\fP
+ If compiled with threading, enables 
+this many threads. Default is 1. 
+.TP
+\fB\-r\fP\fI0\fP
+ Restart with all data. Currently must use the offset
+equal to ``0\&'' 
+for a normal restart. 
+.TP
+\fB\-r\fP\fIphi\fP
+ Another version of the \fB\-r\fP
+option 
+using the string ``phi\&'' as the argument. 
+Restart but now fix the word by topic matrix 
+to the previously estimated values saved at 
+RepStem.phi,
+and the beta side is held constant and not sampled. 
+Can significantly speed up testing or querying sometimes. 
+.TP
+\fB\-r\fP\fItheta\fP
+ Second version of the \fB\-r\fP
+option 
+using the string ``phi\&'' as the argument. 
+Restart but now fix the document by topic matrix 
+to the previously estimated values saved at 
+RepStem.theta
+and RepStem.testprob\&.
+.TP
+\fB\-s\fP\fIseed\fP
+ Initialise the random number seed. 
+.TP
+\fB\-v\fP
+ Up verbosity by one increment. 
+Starts at zero and currently understands 0\-3. 
+.TP
+\fB\-x\fP
+ Enable use of exclude topics with \fB\-Q\fP\&.
+.PP
+.SS TESTING AND REPORTS
+.TP
+\fB\-h\fP\fIHold,arg\fP
+ Do document completion testing on the test set. 
+There are three styles of document completion implemented 
+given by the Hold
+parameter. 
+.RS
+.TP
+dict 
+every arg\-th
+word in the dictionary is held out in estimating 
+and used for testing. So if a word has dictionary index 
+arg\-1,
+2*arg\-1,
+\fIetc.\fP,
+it is held out. 
+.TP
+doc 
+every arg\-th
+word is held out in estimating the latent variables (like theta) 
+for the document and used instead for testing of perplexity. 
+That is, words at document positions arg\-1,
+2*arg\-1,
+\fIetc.\fP
+.TP
+fract 
+then the fract
+proportion at the tail of the document is held out. 
+The initial proportion is used in estimating. 
+.RE
+.RS
+.PP
+.RE
+.TP
+\fB\-l\fP\fIDiag,cycles,start\fP
+ Do a run\-time estimation of the diagnostic Diag
+starting after the start
+cycle and then taking the 
+estimate every cycles
+cycle. 
+Diagnostics are: 
+.RS
+.TP
+alpha 
+Estimate the prior topic probability vector. 
+Stored in the RepStem.alpha
+file. 
+Note useable with the 
+\fB\-A\fP\fIpdp\fP
+option on restart 
+as the RepStem.alpha
+will be read, 
+though a
+and b
+will need to be set. 
+.TP
+phi 
+Estimate the word probability vector for each topic. 
+Stored in the RepStem.phi
+file. 
+If the model is not a symmetric Dirichlet model, 
+then the word prior vector will be estimated and 
+saved in the RepStem.beta
+file 
+as well. 
+Note useable with the 
+\fB\-B\fP\fIpdp\fP
+option on restart 
+as the RepStem.beta
+will be read, 
+though aw
+and bw
+will need to be set. 
+.TP
+prog 
+How often to do the standard diagnostic reports 
+(default is every 5\-th cycle). 
+.TP
+sparse 
+Estimate topic sparsity in the theta matrix for the 
+words given in DataStem.smap\&.
+If DataStem.smap
+is not there then this defaults to all words. 
+Note, the default can be quite wasteful for multicore, is it duplicates the theta matrix 
+for each thread, so only do for small data sets. 
+Results placed in RepStem.smap\&.
+The report gives ``topic/weight\&'' for topics including the word. 
+.TP
+testprob 
+Estimate the topic probability vector for each test document. 
+Stored in the RepStem.testprob
+file. 
+.TP
+theta 
+Estimate the topic probability vector for each training document. 
+Stored in the RepStem.theta
+file. 
+.RE
+.RS
+.PP
+Note that for Diag=``testprob\&''
+or ``theta\&'', 
+an additional argument after start
+giving the lowerbound 
+on probabilities. Lower ones are dropped. 
+.RE
+.TP
+\fB\-L\fP\fIDiag,cycles,start\fP
+ Do a diagnostic estimate Diag
+after 
+all Gibbs sampling is complete. 
+Sampling of the estimate starts after the start
+cycle 
+and goes for a total of cycles
+cycles 
+(including the starting ones). 
+Diagnostics are: 
+.RS
+.TP
+class 
+Estimate class probabilities with ``true\&'' classes 
+given in DataStem.class
+and then 
+produce confusion matrix for the test data. 
+Output to files 
+DataStem.cnfs
+and DataStem.pcnfs\&.
+.TP
+like 
+Estimate likelihood/perplexity on the test set 
+using the standard (biased) document likelihood, 
+or document completion if the \fB\-h\fP
+option is used. 
+Can also be instigated during run\-time with the 
+\fB\-P\fP
+option. 
+.RE
+.RS
+.PP
+.RE
+.TP
+{\-o}{score[,count 
+}] Scoring rule to pick top words for printing. 
+Methods are `count\&', `idf\&', `cost\&' and `phi\&'\&. Default is `idf\&'\&. 
+Ranking done for top count
+words, default is 20. 
+Methods are 
+.RS
+.TP
+cost: 
+rank by proportion of this word in topic 
+minus estimated proportion assuming topic and word independent. 
+.TP
+count: 
+rank by count in topic. 
+.TP
+idf: 
+rank by fraction of the total occurrences of 
+this word that are in this topic. 
+.TP
+phi: 
+rank by computed phi value (if loaded). 
+.RE
+.RS
+.PP
+.RE
+.TP
+\fB\-O\fP
+ Report log likelihood, not log perplexity. Both 
+are done in base 2. 
+.TP
+\fB\-p\fP
+ Report topic coherency in the log file, 
+and save the detail (per topic) in the RepStem.toppmi
+file. 
+This requires 
+a DataStem.pmi
+or DataStem.pmi.gz
+file exist 
+in the right format. This can be created with the 
+mkmat.pl
+and 
+cooc2pmi.pl
+scripts in the scripts directory of the release. 
+The format is a simple sparse matrix form with lines 
+of the form ``N M PMI\&'' for word indices 
+(offset by 0) N and M and PMI value. 
+\fIWARNING:\fP
+the file DataStem.pmi
+needs to be specifically built for 
+the dataset as the word indices must align. 
+By default, PMI computed for top 10 words. 
+Give option twice, and PMI will be done for all top words 
+ranked (as per the \fB\-o\fP
+option). 
+.TP
+\fB\-P\fP\fIsecs\fP
+ Calculate test perplexity (using document completion) 
+every interval in secs
+seconds. If Gibbs cycles are long, 
+will report only after the cycle finishes. 
+.TP
+\fB\-Q\fP\fInres,file\fP
+ submit list queries given in the file, and return nres
+results for each. Must use the \fB\-r\fP\fIphi\fP
+option with 
+a pre\-estimated phi matrix (for efficiency). 
+.TP
+\fB\-t\fP\fIsize\fP
+ Specify size of training set. It takes the 
+first size
+entries in the data set. Default is all the 
+set minus the test data. 
+.TP
+\fB\-T\fP\fIfilestem\fP
+ Specify a separate test set. 
+Assumes the same suffix as for DataStem\&.
+When using this, be sure to fix the training set size with 
+\fB\-t\fP\fIsize\fP
+if you do not want to train on the full 
+data set. 
+.TP
+\fB\-T\fP\fIsize\fP
+ Specify size of test set. It takes the 
+size
+entries immediately following the training set. 
+Default is zero. This option can be confused with the above, so do not use 
+filestems that are just integers. 
+.TP
+\fB\-V\fP
+ load the dictionary from the 
+DataStem.tokens
+file for use in reporting. It has one token per line. 
+Must have at least level two verbosity or this is ignored. 
+.TP
+\fB\-X\fP
+ Instigate report on naive Bayes classification 
+using the topic model and classes given in DataStem.class
+file. 
+The report is a confusion matrix to file RepStem.tbyc
+built on 
+the training data. 
+.PP
+.SH INPUT FILES
+
+.PP
+The following files provide details about the dataset. 
+The filenames are constructed by adding a suffix to the data stem. 
+The data (document+word) format itself can be one of four different 
+formats and is specified with the \fB\-f\fP
+option. 
+.TP
+DataStem.class
+ Class index for each document, one per line. 
+Optional file used with some reports instigated by 
+\fB\-X\fP
+or \fB\-L\fP\fIclass\fP
+options. 
+.TP
+DataStem.dit+DataStem.wit
+ Simple document index and word index files, both indices offset by 1, one index per line. 
+Words in the collection are listed by document. The DataStem.dit
+file 
+gives the document index, and the corresponding line in DataStem.wit
+gives the dictionary index. 
+.TP
+DataStem.docword
+ This format appears in some UCI data sets 
+at
+.br\fBhttp://archive.ics.uci.edu/ml/datasets/Bag+of+Words\fP\&.
+Word indices offset by 1. 
+.TP
+DataStem.ldac
+ Standard LdaC format. Word indices to the dictionary are offset by 0. 
+.TP
+DataStem.smap
+ A list of word indices (offset by 0) 
+about which one wants a sparsity report generated. 
+The report is instigated by the 
+\fB\-l\fP\fIsp\fP
+option. 
+.TP
+DataStem.tokens
+ tokens/words in the dictionary, one per line. 
+Optional file used with \fB\-V\fP
+option. 
+.TP
+DataStem.txtbag
+ default bag or list format for \fIlinkBags\fP(1)
+command of text\-bags\&.
+Word indices offset by 0. 
+.PP
+The various output files such as 
+RepStem.par
+(Parameter and dimension output file) 
+are also read on restart with the \fB\-r\fP\fI0\fP
+option. 
+.PP
+.SH OUTPUT FILES
+
+.PP
+The following files are output when the system checkpoints 
+or at the end of the run. 
+These are built by adding a suffix to the report stem, 
+RepStem\&.
+The first set of files are: 
+.TP
+RepStem.alpha
+ If the alpha vector is being estimated 
+with the \fB\-lalpha\fP
+option, then this will contain 
+the estimated value. 
+.TP
+RepStem.beta
+ If a constant beta vector is specified 
+using the \fB\-u\fP
+option, this saves 
+the value, for possible use in a restart. 
+Otherwise, if the phi matrix is being estimated 
+with the \fB\-lphi\fP
+option 
+and the beta vector is not fixed, then this will contain 
+the estimated value. 
+.TP
+RepStem.cnfs+RepStem.pcnfs
+ Best prediction and probability vector confusion matrices 
+built on the test data with the 
+\fB\-L\fP\fIclass\fP
+command. 
+.TP
+RepStem.log
+ Log file created if \fB\-e\fP
+option not used. 
+.TP
+RepStem.par
+ Parameter and dimensions file in simple ``var = value\&'' format. These are detailed in the next section. 
+.TP
+RepStem.phi
+ The Phi matrix written as a binary file: 
+first W (dictionary size), T (topics), 
+C (sample size) are written as 32 bit integers and 
+then the full Phi matrix as native floats with W as the minor index. 
+Only generated with appropriate use of the 
+\fB\-l\fP\fIphi\fP
+option. 
+.TP
+RepStem.smap
+ Optional sparsity report on the 
+word indices listed in DataStem.smap\&.
+The report is instigated by the 
+\fB\-l\fP\fIsp\fP
+option. 
+.TP
+RepStem.tbyc
+ Optional confusion matrix printed when 
+the \fB\-X\fP
+option is used. 
+.TP
+RepStem.toplst
+ A simple text report giving the top word indices 
+for each topic. If a hierarchical model in use, then the 
+``\-1\&'' topic is for the base distribution of words. 
+Word indices are offset from 0. 
+.TP
+RepStem.toppmi
+ A simple text report giving the top word indices 
+and the associated mean PMI for the word. 
+.TP
+RepStem.topset
+ Full diagnostic output for topics and their words 
+instigated with a command sequence like ``\-V \-V \-oidf,100\&''\&. 
+.TP
+RepStem.theta
+ Estimated topic probabilities 
+for each training document 
+written in a simple sparse form. The class index 
+(``\-1\&'' or ``+1\&'' for binary classes, otherwise just the index) 
+is also added if it exists. 
+Topic indices are offset by 0. 
+Only generated with appropriate use of the 
+\fB\-l\fP\fItheta\fP
+option. 
+.TP
+RepStem.testprob
+ Like the \-ltheta
+option but for the test documents. 
+Only generated with appropriate use of the 
+\fB\-l\fP\fItestprob\fP
+option. 
+.PP
+The second set of files gives the actual runtime statistics. 
+Output matrices are in a simple readable sparse vector format 
+the same as the DataStem.docword
+format. 
+.TP
+RepStem.ndt
+ Document by topic counts. 
+.TP
+RepStem.nwt
+ Word by topic counts. 
+.TP
+RepStem.tdt
+ Document by topic table counts if 
+the Alpha side of the model is non\-parametric. 
+.TP
+RepStem.twt
+ Word by topic table counts if 
+the Beta side of the model is non\-parametric. 
+.TP
+RepStem.zt
+ With no burstiness, gives topic 
+index (offset by 0), one per line. 
+With burstiness, gives one ``z,r\&'' per line where ``z\&'' is the 
+topic index (offset by 0) and ``r\&'' is the burst table indicator, 
+which is 1 if the word 
+contributes to standard topic model statistics, and 
+0 if burstiness modelling says the word is a burst 
+so does not contribute to topic model statistics. 
+.PP
+These files along with RepStem.par
+are input 
+on a restart using \fB\-r\fP\fI0\fP\&.
+.PP
+.SH THE PARAMETER FILE
+
+.PP
+The parameter file has the following \fIdimensions\fP:
+.TP
+{N} \-\- number of words in the full collection, 
+summed over all documents. 
+.TP
+{NT} \-\- number of words in the training set, 
+summed over all training documents. 
+.TP
+{W} \-\- number of words in the dictionary. 
+.TP
+{D} \-\- number of documents in total. 
+.TP
+{TRAIN} \-\- number of documents to train on, is always the 
+the first ones in the file. 
+.TP
+{TEST} \-\- number of documents to test on, is always the 
+the last ones in the file. 
+.TP
+{T} \-\- maximum number of topics. 
+.TP
+{ITER} \-\- number of major cycles made last. 
+.PP
+In addition, the float parameters allowed to be specified with the 
+\fB\-F\fP
+and \fB\-G\fP
+options are also given. 
+Finally, the type of model for alpha as specified by the 
+\fB\-A\fP
+option is coded in the 
+PYalpha
+variable. 
+It is 0 if the model is a Dirichlet, 
+the LDA default. 
+It is 1 for hdp, 2 for hpdd and 3 for pdp. 
+Likewise for the PYbeta
+variable and the \fB\-B\fP
+option. 
+.PP
+.SH EXAMPLES
+
+.PP
+.SS BASIC RUNNING
+.PP
+These examples work as is on late model Linux, Macs and Windows. 
+However, you need to replace the executable, 
+hca,
+by the system dependent one, 
+from the install directory where the data/
+directory is. 
+For instance, on Windows that might be hca/hca.exe\&.
+.PP
+Run basic LDA with default parameters 
+and full parameter fitting on the full dataset and no testing, 
+sending logging to stderr\&.
+.Vb
+   hca \-v \-e \-K20 \-Adir \-Bdir \-C100 data/ch c1
+.Ve
+Alternatively, 
+run basic HDP\-LDA with parameter fitting on the full dataset and no testing, 
+sending logging to stderr\&.
+.Vb
+   hca \-v \-e \-K20 \-B0.001 \-C100 data/ch c1
+.Ve
+The command lines mean: 
+.TP
+``\-v\&'': 
+use level one verbosity; 
+.TP
+``\-e\&'': 
+send the log file to stderr,
+not to ``c1.log\&''; 
+.TP
+``\-K20\&'': 
+use 20 topics 
+(the truncation level if using \fB\-A\fP\fIhpdd\fP));
+.TP
+``\-Adir\&'': 
+use a symmetric Dirichlet prior on topic probability 
+vectors for documents with default value; 
+.TP
+``\-Bdir\&'': 
+use a symmetric Dirichlet prior on word probability 
+vectors (i.e., topics) with default value; 
+.TP
+``\-B0.001\&'': 
+use a symmetric Dirichlet prior on word probability 
+vectors (i.e., topics) with this value; 
+.TP
+``\-C100\&'': 
+run for 100 cycles; 
+.TP
+``data/ch\&'': 
+stem for data file; 
+.TP
+``c1\&'': 
+stem for results file. 
+.PP
+Consider the HDP\-LDA version. 
+Before the runtime logging starts, initial details are printed: 
+.Vb
+Version 0.5, H.Pitman\-Yor sampler for topics, Dirichlet sampler for words
+Sampling pars: b(3), b0(3), betatot(4),
+Setting seed = 1403582987
+Read from ldac file: D=395, W=4258, N=84010
+S\-table 'a, ad,  all zero PYP': a=0.000000, N=812/1000, M=100/1000, +S+U/V float mem=626k
+mem   = 1.3 (MByte)
+seed  = 1403582987
+N     = 84010
+W     = 4258
+D     = 395
+TRAIN   = 395
+TEST    = 0
+T     = 20
+ITER  = 100
+PYbeta  = 0
+betatot  = 4.258000 # total over W=4258 words
+PYalpha  = 2
+a     = 0.000000
+b     = 10.000000
+a0     = 0.000000
+b0     = 10.000000
+Initialised with 20 classes
+.Ve
+Note the following: 
+.TP
+.B *
+the betatot
+value is the total of the input 
+beta
+(0.001) over the W=4258 words; 
+internally the betatot
+is maintained and subsequently 
+sampled; 
+.TP
+.B *
+the ``Sampling pars:\&'' line indicates 
+hyperparameters being sampled, which are 
+b,
+b0,
+betatot,
+with 
+b
+and b0
+being sampled every 3 major cycles and betatot
+every 4 major cycles; 
+.TP
+.B *
+in this case a
+and a0
+are not sampled because they are fixed at 0, 
+meaning the alpha side is modelled with a Dirichlet process; 
+.TP
+.B *
+the memory allocated is approximately 1.3Mb, 
+actual usage will vary with stack memory and some items not recorded; 
+.TP
+.B *
+the seed for the random number generator is 1403582987 
+so use ``\-s1403582987\&'' to repeat the same sampling; 
+.TP
+.B *
+there are 395 documents, 4258 different words/tokens in the dictionary and 
+a total of 84010 words/tokens in the documents; 
+.TP
+.B *
+PYbeta=0
+means the beta side is a Dirichlet; 
+.TP
+.B *
+PYalpha=2
+means the alpha side is a truncated GEM prior at the top 
+level and Pitman\-Yor process or Dirichlet process at the document level; 
+.TP
+.B *
+and TEST=0
+means there is no test data. 
+.PP
+By default, every 5 cycles, a short report is printed: 
+.Vb
+[26/05/2014:10:01:38] cycles:  81 82 83 84 85
+log_2(perp)=11.5182,9.9503
+Pars:  b=2.041296, b0=3.007822, betatot=301.019289
+.Ve
+The report frequency is modified with the \fB\-l\fP\fIprob,...\fP
+option, and the report can be extended by adding verbosity with 
+\fB\-v\fP\&.
+The entry in square brackets is the system clock time 
+at the start of cycle 81. 
+Here cycles 81\-85 are run. 
+The two perplexities reported are normalised per token and then given in 
+log to base 2. The first is from the posterior probability with all 
+real\-valued probability vectors marginalised out using Pitman\-Yor process 
+theory but with the latent counts 
+(counts of tables, not full table configurations) included. 
+The second is the running total of word probabilities encountered 
+during sampling. This does not include the probability cost of latent 
+variables (for instance, the topics) so always less. 
+After Pars:
+appears the list of hyperparameters being sampled and their 
+current values. 
+.PP
+Adding an extra level of verbosity using an additional \fB\-v\fP,
+one gets 
+a brief one line report for every hyperparameter being sampled, 
+such as 
+.Vb
+  myarmsMH(b) = 3.272891<\-3.432078, w 37 calls 
+.Ve
+This means the adaptive rejection sampler took 37 calls 
+to sample b\&.
+The initial value was 3.432078 
+and the final value was 3.272891. 
+This line will be printed every time a sampling is done, sometimes multiple 
+ones per major Gibbs cycle. 
+Moreover, topic probabilities are printed. 
+These are estimated (with standard smoothing) from 
+training data. For instance, 
+.Vb
+probs =  0.041541 0.062400 0.083437 0.060447 0.025652 0.069235 ....
+conc. = 10.225621, empty = 0, exp.ent = 19.049888
+.Ve
+The three diagnostics give additional details about the probabilities. 
+The concentration (inverse of variance) applies to these, 
+and it is computed differently depending on the model. 
+If some topics have no data in them, empty
+will tell how much. 
+The effective number of topics is 19.049888, 
+which is the exponential of the entropy of the probability vector 
+(ignoring empty topics). 
+It should always be less than the truncation level. 
+.PP
+At the end, a final report is printed. 
+.Vb
+[29/05/2014:21:07:27] Finished after 100 cycles on average of 0.193804+0.013074(s) per cycle
+
+Topic 6/0 p=12.54% ws=76.1% ds=14.2% ew=584 ed=24 da=10 t1=4 ud=0.9344 pd=0.6448 co=\-1.4%
+Topic 3/1 p=6.82% ws=76.8% ds=39.0% ew=790 ed=56 da=6 t1=3 ud=0.8126 pd=0.7304 co=\-0.8%
+Topic 14/2 p=5.73% ws=83.2% ds=82.0% ew=442 ed=93 da=12 t1=5 ud=0.9223 pd=0.7350 co=\-0.3%
+...
+
+Average topicXword sparsity = 82.93%
+Average docXtopic sparsity = 66.14%
+Underused topics = 0.0%
+
+probs =  0.037662 0.031478 0.034289 0.020517 0.043002 0.097527 0.022766 0.068859 0.114952 ...
+conc. = 1.784346, empty = 0, exp.ent = 15.296125
+log_2(train perp) = 11.456566
+.Ve
+The figures give 0.19380 seconds per cycle for the Gibbs sampler 
+and 0.01307 seconds per cycle for the adative rejection sampling 
+of hyperparameters. Note these figures are not collected 
+correctly for the multi\-core version. 
+Some basic details for the topics are given too. 
+These are listed in terms of decreasing proportion. 
+Details are as follows: 
+.TP
+p: 
+proportion of tokens tagged with this topic; 
+.TP
+ws: 
+word sparsity, proportion of words occurring zero times with this topic; 
+.TP
+ds: 
+document sparsity, proportion of documents having zero occurrences of this topic; 
+.TP
+ew: 
+effective number of words, expenential of the entropy of the word distribution; 
+.TP
+ew: 
+effective number of documents, expenential of the entropy of the document distribution (given topic); 
+.TP
+da: 
+documents with proportion for topic greater than 1/sqrt(T). 
+.TP
+t1: 
+documents with this topic as most common. 
+.TP
+ud: 
+Hellinger distance to the uniform distribution. 
+.TP
+pd: 
+Hellinger distance to the (training) population word distribution; 
+.TP
+co: 
+coherence as per Mimno, Wallach, Talley, Leenders and McCallum, EMNLP 2011. 
+.PP
+So the first topic has 6/0 given. This means it was index 6 in the 
+run but is rank 0 in terms of proportion. In the saved data file 
+it will be topic 6. With more verbosity, top topic words will be given 
+as well ranked according to the \fI\-o\fP
+option. 
+Totals for some of the topics are also given: 
+``Average topicXword sparsity\&'' is the mean of the word sparsities 
+(ws),
+``Average docXtopic sparsity\&'' 
+gives the mean of the document sparsities (ds),
+and the number of underused topics is the 
+percentage of topics whose observed proportion 
+is less than 1/T/100 or with less than 5 occurrences. 
+.PP
+The log_2(train perp)
+figure is equivalent 
+to the log_2(perp)
+figure 
+above because there is no test data. 
+At this point, a number of data files will have been 
+written, the same as done with any checkpoint. 
+The main one is the parameter file 
+c1.par
+which gives all the dimensions as well 
+as the final values of the hyper\-parameters. 
+Note the probs
+are also included, but these 
+are for information only. 
+The others can be used to restart the run. 
+.PP
+If you have the multicore version compiled, 
+and you have an 8\-core CPU, then run with 8 threads: 
+.Vb
+   hca \-v \-e \-K20 \-B0.001 \-C100 \-q8 data/ch c1
+.Ve
+.TP
+``\-q8\&'': 
+use 8 threads for Gibbs sampling. 
+.PP
+This just repeats the above but should be faster! 
+.PP
+.SS RESTART AND PRINT WORDS FOR THE TOPICS
+Restart from checkpoint after the previous run but run no cycles. 
+Input the tokens from 
+data/ch.tokens,
+and print top 10 words for each topic. 
+.Vb
+   hca \-v \-v \-r0 \-e \-V \-C0 data/ch c1
+.Ve
+The command line means: 
+.TP
+``\-v \-v\&'': 
+use level two verbosity; 
+.TP
+``\-r0\&'': 
+restart from document 0, i.e., on all documents; 
+.TP
+``\-V\&'': 
+input the tokens from 
+``data/ch.tokens,\&'' and print top 10 words for each topic. 
+Note must have at least level two verbosity; 
+.TP
+``\-C0\&'': 
+do not run any cycles, just do reporting. 
+.PP
+After printing initial details, this will print two 
+sets of details. 
+The first is a list of top topic words (if verbosity is greater than 1) 
+and topic diagnostics. 
+Topics are printed in decreasing order of occurrence. 
+The extra verbosity level and the \fB\-V\fP
+means that topic words will be printed out too. 
+.PP
+For more detail to the RepStem.topset
+file, use: 
+.Vb
+   hca \-v \-v \-r0 \-e \-V \-V \-oidf,100 \-C0 data/ch c1
+.Ve
+The command line means: 
+.TP
+``\-V \-V\&'': 
+extra \fB\-V\fP
+means create the 
+RepStem.topset
+file of details. 
+.TP
+``\-oidf,100\&'': 
+means report on up to 100 words for each topic, 
+and words ranked by the idf
+score. 
+.PP
+The first two lines give brief column heads for the topic and word lines. 
+The scores match those printed with diagnostics. 
+.PP
+.SS PRODUCE SPARSITY MAPPINGS AND DOCUMENT TOPIC PROBABILITIES
+Restart again and build a topic probability vector for each document, 
+as well as sparsity mappings for the words in 
+data/ch.smap
+file. 
+This you need to create/edit ahead of time. 
+This must run a number of cycles because the estimates are done 
+during the Gibbs sampling. 
+.Vb
+hca \-v \-r0 \-e \-lsparse,2,1 \-ltheta,2,1,0.001 \-C20 data/ch c1
+.Ve
+.TP
+``\-lsparse,2,1\&'': 
+sample for sparsity every 2nd cycle 
+starting at the 1st. 
+.TP
+``\-ltheta,2,1,0.001\&'': 
+sample probabilities per document 
+(theta) every 2nd cycle 
+starting at the 1st. 
+Only report probabilities above 0.001. 
+.TP
+``\-C20\&'': 
+sampling done for 20 cycles. 
+.PP
+Now view the sparsity report at c1.smap
+and 
+the topic probabilities at c1.theta,
+and the values saved in the parameter file c1.par\&.
+Again, add the \fB\-q\fP\fI8\fP
+option to run this faster, 
+with 8 threads (if you have 8 cores). 
+.PP
+Read lines in the sparsity report, c1.smap,
+as follows: 
+.Vb
+\-\-(12): 5/2.6 14/1.3 19/219.0 perp=1.149816
+.Ve
+Token with index 12 occurs in topics 5, 14 and 19. 
+It has 2.6 counts (its a sample average so counts can be a fraction) 
+in topic 5 and 219.0 in topic 19. 
+The effective number of topics using this token is 1.149816. 
+This is measured as the exponential of the entropy of the topic distribution 
+(i.e., probability of topic given the single word and assuming topics 
+are equally likely). 
+.PP
+Read lines in the topic probabilities report, c1.theta,
+as follows: 
+.Vb
+15: 16:0.006699 17:0.088948 19:0.902410
+.Ve
+Document 15 has 0.006699 for topic 15 and 0.902410 for topic 17. 
+The three topics only add to 0.998057 because some 
+smaller topics must have been dropped. 
+.PP
+.SS RUN WITH TESTING
+.PP
+Testing discussed here only tests on the latest sample done with 
+Gibbs. More sophisticated testing, described later 
+first estimates the model parameters over a number of Gibbs 
+iterations, and then perform testing using the estimates. 
+This is described in later subsections. 
+.PP
+First run basic LDA with training and parameter fitting on a subset 
+and testing on the final 100 documents. 
+The training subset is the full dataset minus the test data. 
+Logging now to c1.log\&.
+Checkpoint every 20 cycles 
+(note, we usually only do this for cycles taking over 10 minutes each). 
+.Vb
+hca \-v \-K20 \-C100 \-c20 \-T100 data/ch c1
+.Ve
+Again run multi\-core with \fB\-q\fP\fI8\fP
+if needed. 
+.TP
+``\-c20\&'': 
+do a checkpoint with any reporting every 
+20 cycles. 
+.TP
+``\-T100\&'': 
+use the last 100 documents for testing, 
+so the first (datasetsize\-100) are used for training. 
+The documents must be ordered so the test data is at the end. 
+Alternatively, a file stem can be given if test data is in a 
+separate file, so loaded from there. 
+.PP
+View the end of the log file to get the test perplexity, 
+which is printed after ``log_2(test perpML)\&''\&. 
+.PP
+Now restart but use document completion (every 4th word) to 
+get perplexity, with no more Gibbs cycles. 
+Without \fB\-h\fP
+the default is to use 
+a standard likelihood calculation so will be biased. 
+.Vb
+hca \-v \-e \-r0 \-C0 \-hdoc,4 \-T100 data/ch c1
+.Ve
+.TP
+``\-hdoc,4\&'': 
+hold out every 4\-th word in 
+the document. 
+.TP
+``\-T100\&'': 
+the test set size must be repeated, since it is not 
+reloaded with the restart. 
+.PP
+View the end of the log file to get the test perplexity, 
+which is printed after ``log_2(test perpHold)\&''\&. 
+Note it is also recorded in the parameter file. 
+.PP
+Restart and record the 
+PMI and the classification details on test data. 
+.Vb
+hca \-v \-v \-V \-r0 \-C0 \-Llike,0,0 \-X \-p \-T100 data/ch c1
+.Ve
+.TP
+``\-Llike,0,0\&'': 
+prevent it 
+doing test likelihood calculations, which are potentially slow 
+on larger data sets. 
+.TP
+``\-X\&'': 
+load up class data from data/ch.clas
+file to 
+enable classification on test data. 
+.TP
+``\-p\&'': 
+initiate PMI calculation. 
+.PP
+The PMI data has a value printed for each topic as well as a 
+final average. It bases its calculations on the matrix 
+data/ch.pmi.gz
+created explicitly for this test set. 
+For other datasets, you will need to download prepared 
+PMI matrices from the project homepage. 
+The PMI output in the log file 
+adds a PMI figure at the end of the second set of 
+diagnostics: 
+.Vb
+Topic 0 stats: p=3.16%, ws=86.3%, ds=71.4%, pmi=2.565,
+Topic 1 stats: p=6.73%, ws=81.7%, ds=76.2%, pmi=0.825,
+Topic 2 stats: p=3.59%, ws=85.2%, ds=72.9%, pmi=1.392,
+.Ve
+Moreover, the general diagnistics get an extra line: 
+.Vb
+Average PMI = 0.602
+.Ve
+.PP
+.SS ESTIMATING MODEL PARAMETERS
+.PP
+The assumes a run has already been done. 
+Now we restart and initiate estimation. 
+.Vb
+hca \-v \-e \-r0 \-C100 \-lphi,3,1 \-ltheta,3,1 \-lalpha,3,1 data/ch c1
+.Ve
+.TP
+``\-lalpha,3,1\&'': 
+estimate the alpha
+vector if 
+the Alpha side is non\-parametric, and save 
+in the c1.alpha
+file. 
+Estimation starts after the 1st cycle and a sample is added to the 
+average every 3 cycles, 
+that is, 1,4,7,...,94,97. 
+.TP
+``\-lphi,3,1\&'': 
+estimate the phi
+matrix, and if 
+the Beta side is non\-parametric, then also estimate the 
+beta
+vector. 
+Saved as the c1.phi
+and c1.beta
+files respectively. 
+Estimation as before. 
+.TP
+``\-ltheta,3,1\&'': 
+estimate the theta
+matrix 
+and save as the c1.theta
+file. 
+Estimation as before. 
+.PP
+The files c1.alpha
+and c1.beta
+are text but 
+the file c1.phi
+is binary. 
+The file c1.theta
+is written in a readable sparse form. 
+.PP
+.SS BURSTINESS
+.PP
+The burstiness version significantly improves everything. 
+Our best bet, currently, is to run 
+with optimisation of the hyperparameters: 
+.Vb
+hca \-v \-v \-e \-K20 \-C100 \-Sbdk=100 \-Sad=0.5 data/ch c1
+.Ve
+.TP
+``\-Sbdk=100\&'': 
+burstiness document concentration is different 
+for every topic. This initialises all of them to 100. 
+Default has no burstiness. 
+.TP
+``\-Sad=0.5\&'': 
+burstiness document discount set to 
+0.5, same for all topics. Default is zero. 
+.PP
+The initial discount for the bursty topics is 
+0.5. The concentration we set quite high initially, 
+and these will be sampled separately with 
+each topic in batches, so bdk
+is a vector in the 
+parameter file. 
+The hyperparameter sampling slows it down quite a bit but seems to 
+make a significant difference. Unused topics sometimes 
+get a very low concentration. 
+Alternatively, fix the burstiness discount with 
+\fB\-F\fP\fIad\fP
+and continue sampling burstiness concentration only, 
+which is quite a lot faster. 
+Note burstiness works well with multi\-core as does 
+sampling of hyperparameters. 
+.PP
+Diagnostics reported for burstiness, printed at the end, are as follows: 
+.Vb
+Burst report:  multis=55.45%, tables=79.57%, tbls\-in\-multis=63.15%
+.Ve
+These are: 
+.TP
+multis: 
+percentage of tokens in documents that occur more than 
+once. Only these are affected by burstiness processing. 
+So (100\-multis)
+is proportion of tokens unique in 
+their document. 
+.TP
+tables: 
+percentage of data being passed up by the burstiness 
+sub\-module to the topic model. 
+Note 100% of the (100\-multis)%
+unique tokens will 
+be passed up as unique tokens always go to the topic model. 
+Of the remaining multis%
+tokens, only 
+tbls\-in\-multis%
+get passed up. 
+.TP
+tbls\-in\-multis: 
+the percentage of 
+non\-unique words in documents that are passed up by the burstiness 
+sub\-module to the topic model. 
+.PP
+.SH ERRORS
+
+.PP
+There is some error reporting on failure. 
+.PP
+If the software quits during a run on larger data with an 
+error message like: 
+.Vb
+    S_V(N,M,A) tagged 'XXX' hit bounds (BN,BM)
+.Ve
+for integers N,M
+and label XXX
+then you 
+need to increase the bounds BN,BM\&.
+If only the BM
+bound is violated, 
+then set BN
+to its default (10000) and increase 
+BM
+to, say 5000 (your choice) with the 
+option \fB\-N\fP\fI10000,5000\fP\&.
+The BN
+bound should only be violated 
+when the Beta side table is affected, 
+in which case the label will be 
+XXX=\&''SB, topicXword PYP". 
+Now increase BN
+to, say 30000 (your choice) with the 
+option \fB\-N\fP\fI30000,1000\fP,
+leaving BM
+as it was. 
+.PP
+For other errors, please report to the maintainer. 
+Best bet is to recompile 
+with ``MYDEBUG=\-g\&'' set in the Makefile 
+and possibly run under a memory checker to get details of 
+the reason for the crash. 
+.PP
+.SH SEE ALSO
+
+.PP
+The command \fIlinkBags\fP(1)
+is available from text\-bags
+at 
+\fBhttps://github.com/wbuntine/text\-bags\fP
+and was previously released at \fBhttp://mloss.org\fP\&.
+The extended library libstb,
+parts of which are included, is available 
+individually from \fBhttp://mloss.org\fP
+also at 
+\fBhttps://github.com/wbuntine/libstb\fP
+\&. 
+.PP
+.SH VERSION
+
+.PP
+This programme is version 0.61 of 2014/09/10\&.
+This incorporates parts of the library libstb
+version 1.8 
+also of 2014/09/10\&.
+.PP
+.SH LICENSE AND COPYRIGHT
+
+.PP
+.TP
+Copyright 
+(C)2011\-2014, Prof. Wray Buntine, 
+NICTA, Canberra, Australia (to 2013), and Monash 
+University (from 2014), 
+\fBwray.buntine@monash.edu\fP\&.
+Some parts also by Dr.  Jinjing Li (2013) and 
+Mr.  Swapnil Mishra (2013\-2014). 
+.PP
+.TP
+License 
+This Source Code Form is subject to the terms of the Mozilla 
+Public License, v. 2.0. If a copy of the MPL was not 
+distributed with this file, You can obtain one at 
+\fBhttp://mozilla.org/MPL/2.0/\fP\&.
+.PP
+.SH AUTHOR
+
+.PP
+Prof. Wray Buntine 
+.br
+Email: \fBWray.Buntine@monash.edu\fP
+.PP
+Some parts also done by Dr.  Jinjing Li and 
+Mr.  Swapnil Mishra. 
+.PP
+.\" NOTE: This file is generated, DO NOT EDIT.
