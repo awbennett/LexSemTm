@@ -213,4 +213,4 @@ LexSemTM sense distributions are available at
 https://storage.googleapis.com/lexsemtm/gold_usages.tar.gz for download.
 
 # Licensing
-* MIT license - http://opensource.org/licenses/MIT
+MIT license: http://opensource.org/licenses/MIT
