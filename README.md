@@ -211,3 +211,6 @@ evaluating sense distribution learning using "make_gold_dists_file.py"
 The full sets of usages for these lemmas used to train the corresponding
 LexSemTM sense distributions are available at
 https://storage.googleapis.com/lexsemtm/gold_usages.tar.gz for download.
+
+# Licensing
+* MIT license - http://opensource.org/licenses/MIT
