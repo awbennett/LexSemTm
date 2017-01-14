@@ -1,4 +1,4 @@
-This repository provides for accessing the LexSemTM dataset, and running
+This repository provides Python 2.7 interfaces for accessing the LexSemTM dataset, and running
 experiments using HCA-WSI and HDP-WSI. If you make use this code or the
 LexSemTM dataset in your work, please cite:
 
@@ -59,7 +59,8 @@ some example code demonstrating the use of the LexSemTMReader class.
 
 Princeton WordNet is available for download at https://wordnet.princeton.edu,
 and is required to create sense distributions from the topic modelling output
-of HDP or HCA.
+of HDP or HCA. macOS users can install WordNet 3.1 using the [Homebrew](https://brew.sh) package
+manager: `brew install wordnet`.
 
 Install all version(s) of WordNet to be experimented with, and link or copy
 the binaries to the "nlp_tools/wn_bin" directory. Follow the instructions
@@ -72,10 +73,12 @@ and an executable with name "wn3.0" should be stored in "nlp_tools/wn_bin"
 
 ### Compile Morpha
 
-Morpha is required in order to align topic modelling output to WordNet.
+[Morpha](https://github.com/linziheng/pdtb-parser/tree/master/lib/morph) is required 
+in order to align topic modelling output to WordNet.
 The compiled morpha binary needs to be located at "nlp_tools/morpha/morpha",
 and should be executable. If the provided binary (compiled on Linux) does not
 work, follow the instructions in "nlp_tools/morpha/README" to re-compile.
+Re-compiling Morpha requires [`flex 2.5.4a`](http://pkgs.fedoraproject.org/repo/pkgs/flex/flex-2.5.4a.tar.gz/bd8753d0b22e1f4ec87a553a73021adf/flex-2.5.4a.tar.gz).
 
 ### Configure OpenNLP
 
@@ -99,9 +102,16 @@ instructions at "topicmodelling/hdp/README" or
 
 In order to be able to run the evaluate part of the sense distribution learning
 script, the Natural Language Toolkit (NLTK) must be installed.
-Follow the instructions at
-http://www.nltk.org/install.html
-if necessary.
+Use the [Miniconda](http://conda.pydata.org/docs/install/quick.html) Python package manager (`conda install nltk`) or follow the 
+instructions at http://www.nltk.org/install.html if necessary. Once the `nltk`
+package is installed, NLTK's own WordNet corpora zip file needs to be installed from 
+within the Python virtual environment/Conda env:
+```python
+import nltk
+nltk.download()
+```
+Select the WordNet corpora and the destination directory e.g. `/usr/local/share`.
+NLTK will install `corpora/wordnet.zip` into the specified destination directory.
 
 ## Running Experiments
 
